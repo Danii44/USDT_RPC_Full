@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>OffChain RPC Demo</title>
+    <title>BSC Demo Network - Real BNB Prices + Zero Gas</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="style.css">
 </head>
@@ -24,8 +24,8 @@
                 <div class="logo">
                     <i class="fas fa-coins"></i>
                     <div>
-                        <h1>OffChain RPC Demo</h1>
-                        <p class="subtitle">Real + Demo Balances • Zero Gas Fees</p>
+                        <h1>BSC Demo Network</h1>
+                        <p class="subtitle">Real BNB Prices • Zero Gas Fees • Live USD Values</p>
                     </div>
                 </div>
                 
@@ -51,7 +51,7 @@
             <div class="info-grid">
                 <div class="info-item">
                     <span class="label">RPC URL:</span>
-                    <span class="value" id="rpcUrl">Loading...</span>
+                    <span class="value monospace" id="rpcUrl">Loading...</span>
                     <button class="btn-small" onclick="copyRPC()">
                         <i class="far fa-copy"></i>
                     </button>
@@ -66,21 +66,42 @@
                     <span class="label">Environment:</span>
                     <span class="value badge demo">DEMO NETWORK</span>
                 </div>
+                <div class="info-item">
+                    <span class="label">BNB Price:</span>
+                    <span class="value" id="bnbPrice">$--.--</span>
+                </div>
             </div>
         </div>
 
-        <!-- Warning Banner -->
-        <div class="warning-banner">
-            <i class="fas fa-exclamation-triangle"></i>
-            <div>
-                <strong>⚠️ Demo Environment:</strong> Shows Real Balances + Demo Tokens. 
-                Demo tokens exist only on this network. Transactions use zero gas.
+        <!-- Features Banner -->
+        <div class="features-banner">
+            <div class="feature">
+                <i class="fas fa-sync-alt"></i>
+                <span>Real BNB Price from Binance</span>
+            </div>
+            <div class="feature">
+                <i class="fas fa-dollar-sign"></i>
+                <span>USD Values in MetaMask</span>
+            </div>
+            <div class="feature">
+                <i class="fas fa-gas-pump"></i>
+                <span>Zero Gas Fees</span>
+            </div>
+            <div class="feature">
+                <i class="fas fa-bolt"></i>
+                <span>Instant Transactions</span>
             </div>
         </div>
 
         <!-- Balances -->
         <div class="card balances-card">
-            <h2><i class="fas fa-chart-bar"></i> Your Balances</h2>
+            <div class="card-header">
+                <h2><i class="fas fa-chart-bar"></i> Your Balances</h2>
+                <div class="portfolio-total">
+                    <span class="total-label">Total Portfolio:</span>
+                    <span class="total-amount" id="totalValue">$0.00</span>
+                </div>
+            </div>
             
             <div class="balance-controls">
                 <button class="btn btn-secondary" onclick="refreshBalances()">
@@ -92,14 +113,13 @@
             </div>
             
             <div class="balances-grid" id="balancesGrid">
-                <!-- Balances will be loaded here -->
+                <div class="empty-state">
+                    <i class="fas fa-wallet"></i>
+                    <p>Connect wallet to see BNB and USDT balances</p>
+                </div>
             </div>
         </div>
-<!-- After the balances-grid -->
-<div class="total-portfolio">
-    <div class="total-portfolio-label">Total Portfolio Value</div>
-    <div class="total-portfolio-amount" id="totalValue">$0.00</div>
-</div>
+
         <!-- Send Tokens -->
         <div class="card send-card">
             <h2><i class="fas fa-paper-plane"></i> Send Tokens</h2>
@@ -113,22 +133,28 @@
                            placeholder="0x742d35Cc6634C0532925a3b844Bc454e4438f44e">
                 </div>
                 
-                <div class="form-group">
-                    <label for="sendAmount">
-                        <i class="fas fa-coins"></i> Amount
-                    </label>
-                    <input type="number" id="sendAmount" placeholder="0.00" step="0.1">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="sendAmount">
+                            <i class="fas fa-coins"></i> Amount
+                        </label>
+                        <input type="number" id="sendAmount" placeholder="0.00" step="0.1">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="tokenSelect">
+                            <i class="fas fa-list"></i> Token
+                        </label>
+                        <select id="tokenSelect">
+                            <option value="bnb">BNB</option>
+                            <option value="usdt">USDT</option>
+                        </select>
+                    </div>
                 </div>
                 
-                <div class="form-group">
-                    <label for="tokenSelect">
-                        <i class="fas fa-list"></i> Select Token
-                    </label>
-                    <select id="tokenSelect">
-                        <option value="BNB">BNB</option>
-                        <option value="USDT">USDT</option>
-                        <option value="OCH">OCH Token</option>
-                    </select>
+                <div class="gas-info">
+                    <i class="fas fa-info-circle"></i>
+                    <span>Gas fee: ~$0.00 (Zero gas demo network)</span>
                 </div>
                 
                 <div class="form-actions">
@@ -149,20 +175,18 @@
             <h2><i class="fas fa-wallet"></i> Add to Wallet</h2>
             <div class="wallet-actions">
                 <button class="btn btn-secondary" onclick="addNetworkToWallet()">
-                    <i class="fas fa-plus-circle"></i> Add Network to Wallet
+                    <i class="fas fa-plus-circle"></i> Add Demo Network
                 </button>
                 <button class="btn btn-secondary" onclick="addUSDTToken()">
                     <i class="fas fa-plus"></i> Add USDT Token
                 </button>
-                <button class="btn btn-secondary" onclick="addOCHToken()">
-                    <i class="fas fa-plus"></i> Add OCH Token
-                </button>
             </div>
+            <p class="note">Note: Adding the network allows you to see USD values in MetaMask</p>
         </div>
 
         <!-- Quick Actions -->
-        <div class="quick-actions">
-            <h3><i class="fas fa-bolt"></i> Quick Actions</h3>
+        <div class="card quick-actions-card">
+            <h2><i class="fas fa-bolt"></i> Quick Actions</h2>
             <div class="actions-grid">
                 <button class="action-btn" onclick="switchToRealBSC()">
                     <i class="fab fa-btc"></i>
@@ -183,13 +207,48 @@
             </div>
         </div>
 
-        <!-- Transaction History -->
-        <div class="card transactions-card">
-            <h2><i class="fas fa-history"></i> Recent Transactions</h2>
-            <div class="transactions-list" id="transactionsList">
+        <!-- Wallet Information -->
+        <div class="card wallet-info-card">
+            <h2><i class="fas fa-wallet"></i> Wallet Information</h2>
+            <div class="wallet-details" id="walletDetails">
                 <div class="empty-state">
-                    <i class="fas fa-exchange-alt"></i>
-                    <p>No transactions yet</p>
+                    <i class="fas fa-wallet"></i>
+                    <p>Connect wallet to see details</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- How It Works -->
+        <div class="card how-it-works">
+            <h2><i class="fas fa-cogs"></i> How It Works</h2>
+            <div class="steps">
+                <div class="step">
+                    <div class="step-number">1</div>
+                    <div class="step-content">
+                        <h3>Connect Wallet</h3>
+                        <p>Connect MetaMask or any Web3 wallet to the BSC Demo Network</p>
+                    </div>
+                </div>
+                <div class="step">
+                    <div class="step-number">2</div>
+                    <div class="step-content">
+                        <h3>Get Demo Tokens</h3>
+                        <p>Receive demo BNB and USDT tokens using the faucet button</p>
+                    </div>
+                </div>
+                <div class="step">
+                    <div class="step-number">3</div>
+                    <div class="step-content">
+                        <h3>Send Transactions</h3>
+                        <p>Send tokens with zero gas fees. USD values show in MetaMask</p>
+                    </div>
+                </div>
+                <div class="step">
+                    <div class="step-number">4</div>
+                    <div class="step-content">
+                        <h3>See Real Prices</h3>
+                        <p>BNB price updates live from Binance API every minute</p>
+                    </div>
                 </div>
             </div>
         </div>
@@ -198,10 +257,11 @@
     <!-- Footer -->
     <footer class="footer">
         <div class="container">
-            <p>OffChain RPC Demo • Deployed on Netlify</p>
+            <p>BSC Demo Network • Real BNB Prices • Zero Gas Fees</p>
             <p class="footer-note">
                 <i class="fas fa-info-circle"></i>
-                This is a demonstration platform. Demo tokens have no real value.
+                This is a demonstration platform. Demo tokens have no real value. 
+                Real BNB prices fetched from Binance API.
             </p>
         </div>
     </footer>
