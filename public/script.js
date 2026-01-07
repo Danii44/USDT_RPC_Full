@@ -1,4 +1,4 @@
-// public/script.js - REAL BNB PRICE VERSION
+// public/script.js - COMPLETE WORKING VERSION
 let web3;
 let currentAccount = null;
 let isDemoNetwork = false;
@@ -12,7 +12,7 @@ const RPC_URL = window.location.origin + '/.netlify/functions/rpc';
 
 // Initialize
 document.addEventListener('DOMContentLoaded', async function() {
-    console.log('Initializing...');
+    console.log('Initializing OffChain RPC Demo...');
     console.log('Demo RPC:', RPC_URL);
     console.log('Real BSC RPC:', REAL_BSC_RPC);
     
@@ -21,7 +21,30 @@ document.addEventListener('DOMContentLoaded', async function() {
     
     // Check wallet
     await checkWalletConnection();
+    
+    // Set up button listeners
+    setupButtonListeners();
 });
+
+// Set up all button listeners
+function setupButtonListeners() {
+    // Connect button
+    document.getElementById('connectBtn').addEventListener('click', connectWallet);
+    
+    // Disconnect button
+    document.getElementById('disconnectBtn').addEventListener('click', disconnectWallet);
+    
+    // Other buttons
+    document.querySelector('[onclick="getFaucet()"]').addEventListener('click', getFaucet);
+    document.querySelector('[onclick="sendTokens()"]').addEventListener('click', sendTokens);
+    document.querySelector('[onclick="clearForm()"]').addEventListener('click', clearForm);
+    document.querySelector('[onclick="refreshBalances()"]').addEventListener('click', refreshBalances);
+    document.querySelector('[onclick="testRPC()"]').addEventListener('click', testRPC);
+    document.querySelector('[onclick="showHelp()"]').addEventListener('click', showHelp);
+    document.querySelector('[onclick="addNetworkToWallet()"]').addEventListener('click', addNetworkToWallet);
+    document.querySelector('[onclick="addUSDTToken()"]').addEventListener('click', addUSDTToken);
+    document.querySelector('[onclick="addOCHToken()"]').addEventListener('click', addOCHToken);
+}
 
 // Check wallet connection
 async function checkWalletConnection() {
@@ -45,7 +68,7 @@ async function checkWalletConnection() {
         setupEventListeners();
         
     } else {
-        showNotification('Please install MetaMask', 'warning');
+        showNotification('Please install MetaMask to use this demo', 'warning');
         document.getElementById('connectionStatus').innerHTML = 
             '<i class="fas fa-exclamation-triangle"></i> MetaMask Required';
         document.getElementById('connectBtn').disabled = true;
@@ -78,7 +101,7 @@ async function connectWallet() {
         await switchToDemoNetwork();
         await loadBalances();
         
-        showNotification('Wallet connected!', 'success');
+        showNotification('Wallet connected successfully!', 'success');
         
     } catch (error) {
         console.error('Connection error:', error);
@@ -93,6 +116,31 @@ async function connectWallet() {
     } finally {
         hideLoading();
     }
+}
+
+// Update UI when connected - ADDED THIS FUNCTION
+function updateConnectedUI() {
+    document.getElementById('connectionStatus').innerHTML = 
+        `<i class="fas fa-check-circle"></i> Connected`;
+    document.getElementById('connectionStatus').className = 'status connected';
+    document.getElementById('connectBtn').style.display = 'none';
+    document.getElementById('disconnectBtn').style.display = 'inline-flex';
+    
+    // Show wallet info if exists
+    const walletInfo = document.getElementById('walletInfo');
+    if (walletInfo) {
+        walletInfo.style.display = 'block';
+        const addressEl = document.getElementById('walletAddress');
+        if (addressEl && currentAccount) {
+            addressEl.textContent = formatAddress(currentAccount);
+        }
+    }
+}
+
+// Format address for display
+function formatAddress(address) {
+    if (!address) return '';
+    return address.substring(0, 6) + '...' + address.substring(address.length - 4);
 }
 
 // Switch to demo network (Chain ID 56 - BSC)
@@ -219,7 +267,7 @@ async function loadBalances() {
         
     } catch (error) {
         console.error('Error loading balances:', error);
-        showNotification('Failed to load balances', 'error');
+        showNotification('Failed to load balances: ' + error.message, 'error');
         
         // Show fallback
         displayBalances({
@@ -247,7 +295,10 @@ function displayBalances(data) {
     const totalValue = totalBnbValue + demoUsdtValue + demoOchValue;
     
     // Update total value display
-    document.getElementById('totalValue').textContent = `$${totalValue.toFixed(2)}`;
+    const totalValueEl = document.getElementById('totalValue');
+    if (totalValueEl) {
+        totalValueEl.textContent = `$${totalValue.toFixed(2)}`;
+    }
     
     const balanceData = [
         {
@@ -461,18 +512,176 @@ async function sendTokens() {
     }
 }
 
-// Utility functions (same as before)
+// Add network to wallet
+async function addNetworkToWallet() {
+    try {
+        await window.ethereum.request({
+            method: 'wallet_addEthereumChain',
+            params: [{
+                chainId: '0x38',
+                chainName: 'BSC with Demo Tokens',
+                nativeCurrency: {
+                    name: 'BNB',
+                    symbol: 'BNB',
+                    decimals: 18
+                },
+                rpcUrls: [RPC_URL],
+                blockExplorerUrls: ['https://bscscan.com']
+            }]
+        });
+        
+        showNotification('Demo network added to wallet!', 'success');
+        
+    } catch (error) {
+        console.error('Add network error:', error);
+        showNotification('Failed to add network: ' + error.message, 'error');
+    }
+}
+
+// Add USDT token to wallet
+async function addUSDTToken() {
+    try {
+        await window.ethereum.request({
+            method: 'wallet_watchAsset',
+            params: {
+                type: 'ERC20',
+                options: {
+                    address: '0x55d398326f99059fF775485246999027B3197955',
+                    symbol: 'USDT',
+                    decimals: 18,
+                    name: 'Tether USD'
+                }
+            }
+        });
+        
+        showNotification('USDT token added to wallet!', 'success');
+        
+    } catch (error) {
+        console.error('Add token error:', error);
+        showNotification('Failed to add token: ' + error.message, 'error');
+    }
+}
+
+// Add OCH token to wallet
+async function addOCHToken() {
+    try {
+        await window.ethereum.request({
+            method: 'wallet_watchAsset',
+            params: {
+                type: 'ERC20',
+                options: {
+                    address: '0x1234567890123456789012345678901234567890',
+                    symbol: 'OCH',
+                    decimals: 18,
+                    name: 'OffChain Token'
+                }
+            }
+        });
+        
+        showNotification('OCH token added to wallet!', 'success');
+        
+    } catch (error) {
+        console.error('Add token error:', error);
+        showNotification('Failed to add token: ' + error.message, 'error');
+    }
+}
+
+// Test RPC connection
+async function testRPC() {
+    showLoading('Testing RPC connection...');
+    
+    try {
+        const response = await fetch(RPC_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                jsonrpc: '2.0',
+                method: 'net_version',
+                params: [],
+                id: 1
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (data.result === '56') {
+            showNotification('✅ RPC connection successful! Chain ID: 56', 'success');
+        } else {
+            showNotification('⚠️ RPC returned: ' + data.result, 'warning');
+        }
+        
+    } catch (error) {
+        showNotification('❌ RPC test failed: ' + error.message, 'error');
+    } finally {
+        hideLoading();
+    }
+}
+
+// Clear form
+function clearForm() {
+    document.getElementById('recipientAddress').value = '';
+    document.getElementById('sendAmount').value = '';
+    document.getElementById('sendResult').style.display = 'none';
+}
+
+// Refresh balances
+function refreshBalances() {
+    if (currentAccount) {
+        loadBalances();
+    } else {
+        showNotification('Please connect wallet first', 'warning');
+    }
+}
+
+// Show help
+function showHelp() {
+    alert(`🎮 BSC Demo Network Help
+    
+✅ **Chain ID 56 - Real BSC Network**
+✅ **Real BNB Price Displayed** ($350.50)
+✅ **Demo Tokens Added on Top**
+✅ **Wallet Shows Real Dollar Value**
+✅ **Persistent Storage on Netlify**
+
+**Features:**
+1. Connect wallet (MetaMask/Trust Wallet)
+2. Switch to BSC Network (Chain ID 56)
+3. Get demo tokens from faucet
+4. Send demo transactions
+5. See real + demo balances combined
+6. Real-time price calculations
+
+**Demo Tokens You Get:**
+• 10 Demo BNB = $3,505.00
+• 1,000 Demo USDT = $1,000.00
+• 5,000 Demo OCH = $1,250.00
+• **Total: $5,755.00**
+
+**Note:** Demo balances persist until Netlify function resets.`);
+}
+
+// Utility functions
 function showLoading(message) {
-    document.getElementById('loadingText').textContent = message;
-    document.getElementById('loading').style.display = 'flex';
+    const loadingEl = document.getElementById('loading');
+    const loadingText = document.getElementById('loadingText');
+    
+    if (loadingEl && loadingText) {
+        loadingText.textContent = message;
+        loadingEl.style.display = 'flex';
+    }
 }
 
 function hideLoading() {
-    document.getElementById('loading').style.display = 'none';
+    const loadingEl = document.getElementById('loading');
+    if (loadingEl) {
+        loadingEl.style.display = 'none';
+    }
 }
 
 function showNotification(message, type = 'success') {
     const notification = document.getElementById('notification');
+    if (!notification) return;
+    
     notification.textContent = message;
     notification.className = 'notification ' + type;
     
@@ -490,22 +699,33 @@ function setupEventListeners() {
     if (!window.ethereum) return;
     
     window.ethereum.on('accountsChanged', (accounts) => {
+        console.log('Accounts changed:', accounts);
         if (accounts.length === 0) {
             disconnectWallet();
         } else {
             currentAccount = accounts[0];
+            updateConnectedUI();
             loadBalances();
         }
     });
     
     window.ethereum.on('chainChanged', (chainId) => {
+        console.log('Chain changed to:', chainId);
         if (chainId === '0x38') {
             isDemoNetwork = true;
         } else {
             isDemoNetwork = false;
         }
         updateNetworkStatus();
-        if (currentAccount) loadBalances();
+        
+        if (currentAccount) {
+            loadBalances();
+        }
+    });
+    
+    window.ethereum.on('disconnect', (error) => {
+        console.log('Wallet disconnected:', error);
+        disconnectWallet();
     });
 }
 
@@ -520,64 +740,48 @@ function disconnectWallet() {
     document.getElementById('connectBtn').style.display = 'inline-flex';
     document.getElementById('disconnectBtn').style.display = 'none';
     
-    document.getElementById('balancesGrid').innerHTML = `
-        <div class="empty-state">
-            <i class="fas fa-wallet"></i>
-            <p>Connect wallet to see balances</p>
-        </div>
-    `;
+    // Hide wallet info
+    const walletInfo = document.getElementById('walletInfo');
+    if (walletInfo) {
+        walletInfo.style.display = 'none';
+    }
     
-    document.getElementById('totalValue').textContent = '$0.00';
+    // Clear balances display
+    const balancesGrid = document.getElementById('balancesGrid');
+    if (balancesGrid) {
+        balancesGrid.innerHTML = `
+            <div class="empty-state">
+                <i class="fas fa-wallet"></i>
+                <p>Connect wallet to see balances</p>
+            </div>
+        `;
+    }
+    
+    // Clear total value
+    const totalValueEl = document.getElementById('totalValue');
+    if (totalValueEl) {
+        totalValueEl.textContent = '$0.00';
+    }
+    
     updateNetworkStatus();
     showNotification('Wallet disconnected', 'warning');
 }
 
-// Set up button listeners
-document.addEventListener('DOMContentLoaded', function() {
-    document.getElementById('connectBtn').addEventListener('click', connectWallet);
-    document.getElementById('disconnectBtn').addEventListener('click', disconnectWallet);
-    
-    // Other buttons
-    document.querySelector('[onclick="getFaucet()"]').addEventListener('click', getFaucet);
-    document.querySelector('[onclick="sendTokens()"]').addEventListener('click', sendTokens);
-    document.querySelector('[onclick="clearForm()"]').addEventListener('click', clearForm);
-    document.querySelector('[onclick="refreshBalances()"]').addEventListener('click', refreshBalances);
-    document.querySelector('[onclick="showHelp()"]').addEventListener('click', showHelp);
-});
-
-// Other functions
-function clearForm() {
-    document.getElementById('recipientAddress').value = '';
-    document.getElementById('sendAmount').value = '';
-    document.getElementById('sendResult').style.display = 'none';
-}
-
-function refreshBalances() {
-    if (currentAccount) {
-        loadBalances();
-    } else {
-        showNotification('Please connect wallet first', 'warning');
+// Copy address to clipboard
+function copyAddress() {
+    if (!currentAccount) {
+        showNotification('No wallet connected', 'error');
+        return;
     }
+    
+    navigator.clipboard.writeText(currentAccount).then(() => {
+        showNotification('Address copied to clipboard!', 'success');
+    });
 }
 
-function showHelp() {
-    alert(`🎮 BSC Demo Network Help
-    
-✅ **Chain ID 56 - Real BSC Network**
-✅ **Real BNB Price Displayed**
-✅ **Demo Tokens Added on Top**
-✅ **Wallet Shows Real Dollar Value**
-
-**How it works:**
-1. Connect wallet
-2. Switch to BSC (Chain ID 56)
-3. Get demo tokens (BNB: $350.50 each)
-4. Wallet shows real BNB price
-5. Demo balances persist on Netlify
-
-**Note:** When on our BSC network, you see:
-- Real BNB balance (from blockchain)
-- Demo BNB added (shows real price)
-- Demo USDT & OCH tokens
-- All values calculated at real prices`);
+// Copy RPC URL
+function copyRPC() {
+    navigator.clipboard.writeText(RPC_URL).then(() => {
+        showNotification('RPC URL copied to clipboard!', 'success');
+    });
 }
