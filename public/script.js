@@ -1,11 +1,8 @@
-// public/script.js - UPDATED WITH ERROR HANDLING
+// public/script.js - FIXED FOR METAMASK USD DISPLAY
 let web3;
 let currentAccount = null;
 let isDemoNetwork = false;
-
-// Real BSC RPC for fetching actual balances
-const REAL_BSC_RPC = 'https://bsc-dataseed.binance.org/';
-const realWeb3 = new Web3(REAL_BSC_RPC);
+let currentBNBPrice = 350.50; // Default price
 
 // Netlify RPC for demo functions
 const RPC_URL = window.location.origin + '/.netlify/functions/rpc';
@@ -14,7 +11,6 @@ const RPC_URL = window.location.origin + '/.netlify/functions/rpc';
 document.addEventListener('DOMContentLoaded', async function() {
     console.log('Initializing BSC Demo Network...');
     console.log('Demo RPC:', RPC_URL);
-    console.log('Real BSC RPC:', REAL_BSC_RPC);
     
     // Update display
     document.getElementById('rpcUrl').textContent = RPC_URL;
@@ -47,7 +43,15 @@ function setupButtonListeners() {
         }
     });
     
-    // Quick action buttons
+    // Add to wallet buttons
+    document.querySelectorAll('[onclick*="addNetworkToWallet"]').forEach(btn => {
+        btn.addEventListener('click', addNetworkToWallet);
+    });
+    document.querySelectorAll('[onclick*="addUSDTToken"]').forEach(btn => {
+        btn.addEventListener('click', addUSDTToken);
+    });
+    
+    // Quick actions
     document.querySelectorAll('.action-btn').forEach(btn => {
         if (btn.textContent.includes('Switch to Real BSC')) {
             btn.addEventListener('click', switchToRealBSC);
@@ -58,14 +62,6 @@ function setupButtonListeners() {
         } else if (btn.textContent.includes('Test RPC')) {
             btn.addEventListener('click', testRPC);
         }
-    });
-    
-    // Add to wallet buttons
-    document.querySelectorAll('[onclick*="addNetworkToWallet"]').forEach(btn => {
-        btn.addEventListener('click', addNetworkToWallet);
-    });
-    document.querySelectorAll('[onclick*="addUSDTToken"]').forEach(btn => {
-        btn.addEventListener('click', addUSDTToken);
     });
 }
 
@@ -148,81 +144,34 @@ function updateConnectedUI() {
     document.getElementById('connectionStatus').className = 'status connected';
     document.getElementById('connectBtn').style.display = 'none';
     document.getElementById('disconnectBtn').style.display = 'inline-flex';
-    
-    // Update wallet info
-    updateWalletInfo();
 }
 
-// Update wallet information display
-function updateWalletInfo() {
-    const walletDetails = document.getElementById('walletDetails');
-    if (walletDetails && currentAccount) {
-        walletDetails.innerHTML = `
-            <div class="info-item">
-                <span class="label">Address:</span>
-                <span class="value monospace">${formatAddress(currentAccount)}</span>
-                <button class="btn-small" onclick="copyAddress()">
-                    <i class="far fa-copy"></i>
-                </button>
-            </div>
-            <div class="info-item">
-                <span class="label">Network:</span>
-                <span class="value">BSC Demo Network (Chain ID: 56)</span>
-            </div>
-            <div class="info-item">
-                <span class="label">Gas Fees:</span>
-                <span class="value success">~$0.00 per transaction</span>
-            </div>
-            <div class="info-item">
-                <span class="label">Features:</span>
-                <span class="value">Real BNB Prices • Zero Gas • USD Display</span>
-            </div>
-        `;
-    }
-}
-
-// Format address for display
-function formatAddress(address) {
-    if (!address) return '';
-    return address.substring(0, 6) + '...' + address.substring(address.length - 4);
-}
-
-// Switch to demo network (Chain ID 56 - BSC)
+// Switch to demo network
 async function switchToDemoNetwork() {
     try {
         const chainId = await web3.eth.getChainId();
         
         if (chainId !== '0x38') { // Not on BSC
-            // First try to switch to BSC
+            // Try to switch to BSC
             try {
                 await window.ethereum.request({
                     method: 'wallet_switchEthereumChain',
                     params: [{ chainId: '0x38' }]
                 });
+                isDemoNetwork = true;
             } catch (switchError) {
-                // If network not added, add it with our RPC
+                // If network not added, add it
                 if (switchError.code === 4902) {
-                    await window.ethereum.request({
-                        method: 'wallet_addEthereumChain',
-                        params: [{
-                            chainId: '0x38',
-                            chainName: 'BSC Demo Network (Zero Gas)',
-                            nativeCurrency: {
-                                name: 'BNB',
-                                symbol: 'BNB',
-                                decimals: 18
-                            },
-                            rpcUrls: [RPC_URL],
-                            blockExplorerUrls: ['https://bscscan.com']
-                        }]
-                    });
+                    await addNetworkToWallet();
+                    isDemoNetwork = true;
                 } else {
                     throw switchError;
                 }
             }
+        } else {
+            isDemoNetwork = true;
         }
         
-        isDemoNetwork = true;
         updateNetworkStatus();
         
     } catch (error) {
@@ -233,16 +182,43 @@ async function switchToDemoNetwork() {
     }
 }
 
+// Add network to wallet
+async function addNetworkToWallet() {
+    try {
+        await window.ethereum.request({
+            method: 'wallet_addEthereumChain',
+            params: [{
+                chainId: '0x38',
+                chainName: 'BSC Demo Network',
+                nativeCurrency: {
+                    name: 'BNB',
+                    symbol: 'BNB',
+                    decimals: 18
+                },
+                rpcUrls: [RPC_URL],
+                blockExplorerUrls: ['https://bscscan.com']
+            }]
+        });
+        
+        showNotification('Demo network added to wallet!', 'success');
+        isDemoNetwork = true;
+        updateNetworkStatus();
+        
+    } catch (error) {
+        console.error('Add network error:', error);
+        showNotification('Failed to add network: ' + error.message, 'error');
+    }
+}
+
 // Switch to real BSC network
 async function switchToRealBSC() {
     try {
         await window.ethereum.request({
             method: 'wallet_switchEthereumChain',
-            params: [{ chainId: '0x38' }] // BSC Mainnet
+            params: [{ chainId: '0x38' }]
         });
         showNotification('Switched to real BSC network', 'success');
     } catch (error) {
-        console.error('Switch error:', error);
         showNotification('Failed to switch network: ' + error.message, 'error');
     }
 }
@@ -267,7 +243,7 @@ function updateNetworkStatus() {
     }
 }
 
-// Load balances - Fetch real + demo
+// Load balances from RPC
 async function loadBalances() {
     if (!currentAccount) return;
     
@@ -288,68 +264,27 @@ async function loadBalances() {
         
         const demoData = await demoResponse.json();
         
-        if (!demoData.result) {
-            throw new Error('No demo balances returned');
-        }
-        
-        // Get real balances from BSC
-        let realBNB = '0';
-        let realUSDT = '0';
-        
-        try {
-            // Get real BNB balance
-            realBNB = await realWeb3.eth.getBalance(currentAccount);
-            realBNB = web3.utils.fromWei(realBNB, 'ether');
+        if (demoData.result) {
+            currentBNBPrice = demoData.result.prices?.bnb || 350.50;
+            displayBalances(demoData.result);
             
-            // Get real USDT balance
-            try {
-                const usdtContract = new realWeb3.eth.Contract(
-                    [{
-                        constant: true,
-                        inputs: [{ name: '_owner', type: 'address' }],
-                        name: 'balanceOf',
-                        outputs: [{ name: 'balance', type: 'uint256' }],
-                        type: 'function'
-                    }],
-                    '0x55d398326f99059fF775485246999027B3197955'
-                );
-                const usdtBalance = await usdtContract.methods.balanceOf(currentAccount).call();
-                realUSDT = web3.utils.fromWei(usdtBalance, 'ether');
-            } catch (usdtError) {
-                console.log('USDT error:', usdtError.message);
-            }
-        } catch (realError) {
-            console.log('Real balance error:', realError.message);
-        }
-        
-        // Display combined balances with real prices
-        displayBalances({
-            real: {
-                bnb: realBNB,
-                usdt: realUSDT
-            },
-            demo: demoData.result.balances || { bnb: '0', usdt: '0' },
-            prices: demoData.result.prices || { bnb: 350.50, usdt: 1.00 },
-            usdValues: demoData.result.usdValues || { bnb: '0', usdt: '0', total: '0' }
-        });
-        
-        // Update BNB price display
-        if (demoData.result.prices && demoData.result.prices.bnb) {
+            // Update BNB price display
             const bnbPriceEl = document.getElementById('bnbPrice');
             if (bnbPriceEl) {
-                bnbPriceEl.textContent = `$${demoData.result.prices.bnb.toFixed(2)}`;
+                bnbPriceEl.textContent = `$${currentBNBPrice.toFixed(2)}`;
             }
+        } else {
+            throw new Error('No demo balances returned');
         }
         
     } catch (error) {
         console.error('Error loading balances:', error);
         showNotification('Failed to load balances: ' + error.message, 'error');
         
-        // Show fallback with safe values
+        // Show fallback
         displayBalances({
-            real: { bnb: '0', usdt: '0' },
-            demo: { bnb: '0', usdt: '0' },
-            prices: { bnb: 350.50, usdt: 1.00 },
+            balances: { bnb: '0', usdt: '0' },
+            prices: { bnb: currentBNBPrice, usdt: 1.00 },
             usdValues: { bnb: '0', usdt: '0', total: '0' }
         });
     } finally {
@@ -357,32 +292,21 @@ async function loadBalances() {
     }
 }
 
-// Display balances with value calculations - FIXED ERROR HANDLING
+// Display balances
 function displayBalances(data) {
     const container = document.getElementById('balancesGrid');
     
     if (!container) return;
     
-    // Safely get prices with defaults
-    const bnbPrice = parseFloat(data.prices?.bnb) || 350.50;
-    const usdtPrice = parseFloat(data.prices?.usdt) || 1.00;
+    // Safely get data
+    const bnbPrice = data.prices?.bnb || currentBNBPrice;
+    const bnbBalance = parseFloat(data.balances?.bnb || 0);
+    const usdtBalance = parseFloat(data.balances?.usdt || 0);
     
-    // Safely parse amounts with defaults
-    const realBnb = parseFloat(data.real?.bnb || 0);
-    const demoBnb = parseFloat(data.demo?.bnb || 0);
-    const realUsdt = parseFloat(data.real?.usdt || 0);
-    const demoUsdt = parseFloat(data.demo?.usdt || 0);
-    
-    // Calculate values with safe fallbacks
-    const realBnbValue = realBnb * bnbPrice;
-    const demoBnbValue = demoBnb * bnbPrice;
-    const demoUsdtValue = demoUsdt * usdtPrice;
-    const realUsdtValue = realUsdt * usdtPrice;
-    
-    const totalBnb = realBnb + demoBnb;
-    const totalBnbValue = realBnbValue + demoBnbValue;
-    const totalUsdtValue = realUsdtValue + demoUsdtValue;
-    const totalValue = totalBnbValue + totalUsdtValue;
+    // Calculate USD values
+    const bnbValue = bnbBalance * bnbPrice;
+    const usdtValue = usdtBalance * 1.00;
+    const totalValue = bnbValue + usdtValue;
     
     // Update total value display
     const totalValueEl = document.getElementById('totalValue');
@@ -395,26 +319,18 @@ function displayBalances(data) {
             symbol: 'BNB',
             icon: 'fab fa-btc',
             name: 'Binance Coin',
-            real: realBnb,
-            demo: demoBnb,
-            price: `$${bnbPrice.toFixed(2)}`,
-            realValue: `$${realBnbValue.toFixed(2)}`,
-            demoValue: `$${demoBnbValue.toFixed(2)}`,
-            totalValue: `$${totalBnbValue.toFixed(2)}`,
-            totalAmount: totalBnb.toFixed(4),
+            balance: bnbBalance,
+            price: bnbPrice,
+            value: bnbValue,
             color: 'bnb'
         },
         {
             symbol: 'USDT',
             icon: 'fas fa-dollar-sign',
             name: 'Tether USD',
-            real: realUsdt,
-            demo: demoUsdt,
-            price: `$${usdtPrice.toFixed(2)}`,
-            realValue: `$${realUsdtValue.toFixed(2)}`,
-            demoValue: `$${demoUsdtValue.toFixed(2)}`,
-            totalValue: `$${totalUsdtValue.toFixed(2)}`,
-            totalAmount: (realUsdt + demoUsdt).toFixed(2),
+            balance: usdtBalance,
+            price: 1.00,
+            value: usdtValue,
             color: 'usdt'
         }
     ];
@@ -426,46 +342,34 @@ function displayBalances(data) {
                     <i class="${token.icon}"></i>
                 </div>
                 <div class="token-name">
-                    <h3>${token.symbol} <span class="price">${token.price}</span></h3>
+                    <h3>${token.symbol} <span class="price">$${token.price.toFixed(2)}</span></h3>
                     <div class="token-symbol">${token.name}</div>
                 </div>
             </div>
             
             <div class="balance-total">
-                ${token.totalAmount}
-                <div class="value">${token.totalValue}</div>
+                ${token.balance.toLocaleString('en-US', {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 6
+                })}
+                <div class="value">$${token.value.toFixed(2)}</div>
             </div>
             
-            <div class="balance-breakdown">
-                <div class="breakdown-item">
-                    <span class="breakdown-label">Real (BSC):</span>
-                    <span class="breakdown-value">
-                        ${token.real.toLocaleString('en-US', {
-                            minimumFractionDigits: 2,
-                            maximumFractionDigits: 6
-                        })}
-                        <small>${token.realValue}</small>
-                    </span>
+            <div class="balance-info">
+                <div class="info-row">
+                    <span>Price:</span>
+                    <span>$${token.price.toFixed(2)}</span>
                 </div>
-                <div class="breakdown-item">
-                    <span class="breakdown-label">Demo (Added):</span>
-                    <span class="breakdown-value">
-                        ${token.demo.toLocaleString('en-US', {
-                            minimumFractionDigits: 2,
-                            maximumFractionDigits: 6
-                        })}
-                        <small>${token.demoValue}</small>
-                    </span>
+                <div class="info-row">
+                    <span>Balance:</span>
+                    <span>${token.balance.toLocaleString('en-US', {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 6
+                    })}</span>
                 </div>
-                <div class="breakdown-item">
-                    <span class="breakdown-label">Total in Wallet:</span>
-                    <span class="breakdown-value total-display">
-                        ${parseFloat(token.totalAmount).toLocaleString('en-US', {
-                            minimumFractionDigits: 2,
-                            maximumFractionDigits: 6
-                        })}
-                        <small>${token.totalValue}</small>
-                    </span>
+                <div class="info-row">
+                    <span>USD Value:</span>
+                    <span class="usd-value">$${token.value.toFixed(2)}</span>
                 </div>
             </div>
         </div>
@@ -496,9 +400,8 @@ async function getFaucet() {
         const data = await response.json();
         
         if (data.result && data.result.success) {
-            const totalValue = data.result.usdValues?.total || data.result.values?.total || '$0.00';
             showNotification(
-                `🎉 ${data.result.message}<br>Total Value: ${totalValue}`,
+                `🎉 ${data.result.message}<br>Total Value: ${data.result.usdValues?.total || '$0.00'}`,
                 'success'
             );
             await loadBalances();
@@ -559,7 +462,6 @@ async function sendTokens() {
                         <i class="fas fa-check-circle"></i>
                         <strong>✅ ${data.result.message}</strong><br>
                         Transaction Hash: ${data.result.transactionHash}<br>
-                        <small>Gas Used: ${data.result.gasUsed || '0x5208'} (Free!)</small><br>
                         <small>USD Value: ${data.result.usdValue || '$0.00'}</small>
                     </div>
                 `;
@@ -592,32 +494,6 @@ async function sendTokens() {
         showNotification('Transaction failed: ' + error.message, 'error');
     } finally {
         hideLoading();
-    }
-}
-
-// Add network to wallet
-async function addNetworkToWallet() {
-    try {
-        await window.ethereum.request({
-            method: 'wallet_addEthereumChain',
-            params: [{
-                chainId: '0x38',
-                chainName: 'BSC Demo Network (Zero Gas)',
-                nativeCurrency: {
-                    name: 'BNB',
-                    symbol: 'BNB',
-                    decimals: 18
-                },
-                rpcUrls: [RPC_URL],
-                blockExplorerUrls: ['https://bscscan.com']
-            }]
-        });
-        
-        showNotification('Demo network added to wallet!', 'success');
-        
-    } catch (error) {
-        console.error('Add network error:', error);
-        showNotification('Failed to add network: ' + error.message, 'error');
     }
 }
 
@@ -701,38 +577,29 @@ function refreshBalances() {
 
 // Show help
 function showHelp() {
-    alert(`🎮 BSC Demo Network Help
-    
-✅ **Real BNB Prices from Binance API**
-✅ **USD Values Show in MetaMask**
-✅ **Zero Gas Fees ($0.00)**
-✅ **Instant Demo Transactions**
-✅ **Real + Demo Balances Combined**
+    alert(`🎮 BSC Demo Network - How It Works
 
-**Features:**
-1. Connect wallet (MetaMask/Trust Wallet)
-2. Switch to BSC Demo Network
-3. Get demo tokens from faucet
-4. Send demo transactions
-5. See real + demo balances combined
-6. Real-time BNB price from Binance
+✅ **Real BNB Prices:** Live from Binance API
+✅ **USD in MetaMask:** Shows dollar values automatically
+✅ **Real Gas Prices:** MetaMask calculates USD fees correctly
+✅ **Demo Tokens:** Get free BNB & USDT to test with
+
+**To see USD values in MetaMask:**
+1. Connect your wallet
+2. Add the "BSC Demo Network" to MetaMask
+3. Switch to the demo network
+4. Your balance will show USD conversion
+
+**Network Settings:**
+• Chain ID: 56 (Same as real BSC)
+• RPC URL: ${RPC_URL}
+• Gas Price: 3 gwei (realistic for USD calculation)
+• BNB Price: Updates every minute from Binance
 
 **Demo Tokens You Get:**
-• 5 Demo BNB = ~$1,750 (at $350/BNB)
-• 500 Demo USDT = $500.00
-• **Total: ~$2,250.00**
-
-**Important:**
-• Real BNB price fetched every minute from Binance
-• USD values show automatically in MetaMask
-• Gas fees appear as ~$0.00
-• Demo balances persist until function resets
-• Only BNB and USDT supported
-
-**Network Info:**
-• Chain ID: 56 (BSC)
-• RPC URL: ${RPC_URL}
-• Gas Price: 0.25 gwei (~$0.00)`);
+• 5 BNB = ~$${(5 * currentBNBPrice).toFixed(2)} (at current price)
+• 500 USDT = $500.00
+• Total: ~$${(5 * currentBNBPrice + 500).toFixed(2)}`);
 }
 
 // Utility functions
@@ -757,10 +624,6 @@ function showNotification(message, type = 'success') {
     const notification = document.getElementById('notification');
     if (!notification) return;
     
-    // Remove any existing content
-    notification.innerHTML = '';
-    
-    // Add message with HTML support
     notification.innerHTML = message;
     notification.className = 'notification ' + type;
     
@@ -801,11 +664,6 @@ function setupEventListeners() {
             loadBalances();
         }
     });
-    
-    window.ethereum.on('disconnect', (error) => {
-        console.log('Wallet disconnected:', error);
-        disconnectWallet();
-    });
 }
 
 // Disconnect wallet
@@ -818,17 +676,6 @@ function disconnectWallet() {
     document.getElementById('connectionStatus').className = 'status disconnected';
     document.getElementById('connectBtn').style.display = 'inline-flex';
     document.getElementById('disconnectBtn').style.display = 'none';
-    
-    // Reset wallet info
-    const walletDetails = document.getElementById('walletDetails');
-    if (walletDetails) {
-        walletDetails.innerHTML = `
-            <div class="empty-state">
-                <i class="fas fa-wallet"></i>
-                <p>Connect wallet to see details</p>
-            </div>
-        `;
-    }
     
     // Clear balances display
     const balancesGrid = document.getElementById('balancesGrid');
@@ -857,25 +704,9 @@ function disconnectWallet() {
     showNotification('Wallet disconnected', 'warning');
 }
 
-// Copy address to clipboard
-function copyAddress() {
-    if (!currentAccount) {
-        showNotification('No wallet connected', 'error');
-        return;
-    }
-    
-    navigator.clipboard.writeText(currentAccount).then(() => {
-        showNotification('Address copied to clipboard!', 'success');
-    }).catch(err => {
-        showNotification('Failed to copy address: ' + err.message, 'error');
-    });
-}
-
 // Copy RPC URL
 function copyRPC() {
     navigator.clipboard.writeText(RPC_URL).then(() => {
         showNotification('RPC URL copied to clipboard!', 'success');
-    }).catch(err => {
-        showNotification('Failed to copy RPC URL: ' + err.message, 'error');
     });
 }
