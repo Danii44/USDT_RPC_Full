@@ -1,16 +1,12 @@
-// netlify/functions/rpc.js - REAL BNB PRICE VERSION
-// No external dependencies to avoid 502 errors
-
-// Simple in-memory storage with real price fetching
+// netlify/functions/rpc.js - FIXED FOR METAMASK USD DISPLAY
 let demoStorage = {
     balances: {},
     tokens: {},
     prices: {
-        bnb: null, // Will be fetched from Binance
+        bnb: null,
         usdt: 1.00
     },
-    lastPriceUpdate: 0,
-    priceCacheDuration: 60000 // 1 minute cache
+    lastPriceUpdate: 0
 };
 
 // Fetch real BNB price from Binance
@@ -33,12 +29,12 @@ async function fetchRealBNBPrice() {
     }
 }
 
-// Initialize or get BNB price (with caching)
+// Initialize or get BNB price
 async function getBNBPrice() {
     const now = Date.now();
     
     // Fetch new price if cache expired or no price yet
-    if (!demoStorage.prices.bnb || now - demoStorage.lastPriceUpdate > demoStorage.priceCacheDuration) {
+    if (!demoStorage.prices.bnb || now - demoStorage.lastPriceUpdate > 60000) {
         await fetchRealBNBPrice();
     }
     
@@ -58,28 +54,19 @@ function initAddress(address) {
     
     if (!demoStorage.tokens[addr]) {
         demoStorage.tokens[addr] = {
-            usdt: '100' // Starting with 100 USDT for demo
+            usdt: '100'
         };
     }
     
     return { balances: demoStorage.balances[addr], tokens: demoStorage.tokens[addr] };
 }
 
-// Convert decimal to wei (18 decimals)
+// Convert decimal to wei
 function decimalToWei(amount) {
     return BigInt(Math.floor(parseFloat(amount) * 10**18));
 }
 
-// Convert wei to decimal
-function weiToDecimal(wei) {
-    return (Number(wei) / 10**18).toString();
-}
-
-// Get USD value of BNB balance
-function getUSDValue(bnbAmount, bnbPrice) {
-    return (parseFloat(bnbAmount) * bnbPrice).toFixed(2);
-}
-
+// Main handler
 exports.handler = async function(event, context) {
     console.log('RPC function called:', event.httpMethod);
     
@@ -93,11 +80,7 @@ exports.handler = async function(event, context) {
 
     // Handle preflight
     if (event.httpMethod === 'OPTIONS') {
-        return {
-            statusCode: 200,
-            headers,
-            body: ''
-        };
+        return { statusCode: 200, headers, body: '' };
     }
 
     // Only accept POST
@@ -132,7 +115,7 @@ exports.handler = async function(event, context) {
         
         let result;
         
-        // Get current BNB price for USD calculations
+        // Get current BNB price
         const currentBNBPrice = await getBNBPrice();
         
         // Handle RPC methods
@@ -143,15 +126,16 @@ exports.handler = async function(event, context) {
             result = '0x38'; // BSC Chain ID 56
             
         } else if (method === 'eth_gasPrice') {
-            // Return very low gas price (0.1 gwei) to show almost 0 fees in MetaMask
-            result = '0x5d21dba00'; // 0.25 gwei in hex
+            // Return realistic gas price for MetaMask USD calculation
+            // 3 gwei = 3000000000 wei (normal BSC gas price)
+            result = '0xb2d05e00'; // 3 gwei in hex
             
         } else if (method === 'eth_blockNumber') {
             // Return increasing block number
             result = '0x' + (10000000 + Math.floor(Date.now() / 10000)).toString(16);
             
         } else if (method === 'eth_getBalance') {
-            const [address, blockTag = 'latest'] = params;
+            const [address] = params;
             if (!address) {
                 throw new Error('Address required');
             }
@@ -159,7 +143,7 @@ exports.handler = async function(event, context) {
             const addr = address.toLowerCase();
             const demoData = initAddress(addr);
             
-            // Convert BNB balance to wei
+            // Convert BNB balance to wei (MetaMask expects wei)
             const bnbBalanceWei = decimalToWei(demoData.balances.bnb);
             
             // Return BNB balance in wei
@@ -174,9 +158,9 @@ exports.handler = async function(event, context) {
             const addr = address.toLowerCase();
             const demoData = initAddress(addr);
             
-            // Calculate total value based on real prices
+            // Calculate USD values
             const bnbValue = parseFloat(demoData.balances.bnb) * currentBNBPrice;
-            const usdtValue = parseFloat(demoData.tokens.usdt) * demoStorage.prices.usdt;
+            const usdtValue = parseFloat(demoData.tokens.usdt) * 1.00;
             const totalValue = bnbValue + usdtValue;
             
             result = {
@@ -184,16 +168,15 @@ exports.handler = async function(event, context) {
                     bnb: demoData.balances.bnb,
                     usdt: demoData.tokens.usdt
                 },
+                prices: {
+                    bnb: currentBNBPrice,
+                    usdt: 1.00
+                },
                 usdValues: {
                     bnb: bnbValue.toFixed(2),
                     usdt: usdtValue.toFixed(2),
                     total: totalValue.toFixed(2)
-                },
-                prices: {
-                    bnb: currentBNBPrice,
-                    usdt: demoStorage.prices.usdt
-                },
-                lastUpdated: new Date().toISOString()
+                }
             };
             
         } else if (method === 'demo_faucet') {
@@ -211,7 +194,7 @@ exports.handler = async function(event, context) {
             
             // Calculate USD values
             const bnbValue = 5 * currentBNBPrice;
-            const usdtValue = 500 * demoStorage.prices.usdt;
+            const usdtValue = 500 * 1.00;
             const totalValue = bnbValue + usdtValue;
             
             result = {
@@ -225,8 +208,7 @@ exports.handler = async function(event, context) {
                     bnb: `$${bnbValue.toFixed(2)}`,
                     usdt: `$${usdtValue.toFixed(2)}`,
                     total: `$${totalValue.toFixed(2)}`
-                },
-                transactionHash: '0x' + Math.random().toString(16).substr(2, 64)
+                }
             };
             
         } else if (method === 'demo_send') {
@@ -242,7 +224,7 @@ exports.handler = async function(event, context) {
             const senderData = initAddress(fromAddr);
             const receiverData = initAddress(toAddr);
             
-            // Check balance
+            // Check balance and transfer
             const tokenKey = token.toLowerCase();
             let senderBalance;
             
@@ -273,17 +255,15 @@ exports.handler = async function(event, context) {
             // Create fake transaction hash
             const txHash = '0x' + Math.random().toString(16).substr(2, 64);
             
-            // Calculate USD value of transfer
+            // Calculate USD value
             const usdValue = tokenKey === 'bnb' 
                 ? (parseFloat(amount) * currentBNBPrice).toFixed(2)
-                : (parseFloat(amount) * demoStorage.prices.usdt).toFixed(2);
+                : (parseFloat(amount) * 1.00).toFixed(2);
             
             result = {
                 success: true,
                 transactionHash: txHash,
                 message: `Sent ${amount} ${token.toUpperCase()} ($${usdValue})`,
-                gasUsed: '0x5208', // 21000 gas
-                gasPrice: '0x5d21dba00', // 0.25 gwei
                 usdValue: `$${usdValue}`
             };
             
@@ -318,60 +298,37 @@ exports.handler = async function(event, context) {
                 // name() call - return "Tether USD"
                 result = '0x' + Buffer.from('Tether USD').toString('hex').padEnd(64, '0');
             } else {
-                // Default empty response
                 result = '0x';
             }
             
         } else if (method === 'eth_estimateGas') {
-            // Return standard gas estimate for BNB transfers
-            result = '0x5208'; // 21000 gas for simple transfers
+            // Return standard gas estimate
+            result = '0x5208'; // 21000 gas
             
         } else if (method === 'eth_sendRawTransaction') {
-            // Handle signed transactions (MetaMask sends raw transactions)
-            const [signedTx] = params;
-            
-            // Parse transaction to get recipient and value
-            // This is a simplified version - in real implementation you'd decode the RLP
+            // Handle signed transactions
             const txHash = '0x' + Math.random().toString(16).substr(2, 64);
-            
             result = txHash;
             
         } else if (method === 'eth_sendTransaction') {
-            // For direct transaction sending (less common with MetaMask)
-            const tx = params[0];
             const txHash = '0x' + Math.random().toString(16).substr(2, 64);
             result = txHash;
             
         } else if (method === 'eth_getTransactionReceipt') {
-            // Return fake receipt with successful status
             const txHash = params[0] || '0x' + Math.random().toString(16).substr(2, 64);
-            
-            // Calculate USD value for the transaction
-            let usdValue = '0.00';
-            if (Math.random() > 0.5) { // Simulate BNB transfer
-                usdValue = (Math.random() * 0.5 * currentBNBPrice).toFixed(2);
-            }
             
             result = {
                 transactionHash: txHash,
-                status: '0x1', // Success
+                status: '0x1',
                 blockNumber: '0x' + (10000000 + Math.floor(Date.now() / 10000)).toString(16),
-                blockHash: '0x' + Math.random().toString(16).substr(2, 64),
-                from: '0x' + Math.random().toString(16).substr(2, 40),
-                to: '0x' + Math.random().toString(16).substr(2, 40),
                 gasUsed: '0x5208',
                 cumulativeGasUsed: '0x5208',
-                effectiveGasPrice: '0x5d21dba00', // 0.25 gwei
+                effectiveGasPrice: '0xb2d05e00', // 3 gwei
                 logs: [],
-                logsBloom: '0x' + '0'.repeat(512),
-                transactionIndex: '0x0',
-                contractAddress: null,
-                type: '0x0',
-                usdValue: `$${usdValue}`
+                logsBloom: '0x' + '0'.repeat(512)
             };
             
         } else if (method === 'eth_getTransactionByHash') {
-            // Return transaction details
             const txHash = params[0] || '0x' + Math.random().toString(16).substr(2, 64);
             
             // Simulate a BNB transfer
@@ -379,46 +336,21 @@ exports.handler = async function(event, context) {
             
             result = {
                 hash: txHash,
-                nonce: '0x0',
-                blockHash: '0x' + Math.random().toString(16).substr(2, 64),
                 blockNumber: '0x' + (10000000 + Math.floor(Date.now() / 10000)).toString(16),
-                transactionIndex: '0x0',
                 from: '0x' + Math.random().toString(16).substr(2, 40),
                 to: '0x' + Math.random().toString(16).substr(2, 40),
                 value: '0x' + valueWei.toString(16),
-                gas: '0x5208',
-                gasPrice: '0x5d21dba00', // 0.25 gwei = very low fee
-                input: '0x',
-                v: '0x25',
-                r: '0x' + Math.random().toString(16).substr(2, 64),
-                s: '0x' + Math.random().toString(16).substr(2, 64)
+                gasPrice: '0xb2d05e00', // 3 gwei - IMPORTANT FOR METAMASK USD CALCULATION
+                input: '0x'
             };
             
         } else if (method === 'eth_getBlockByNumber') {
-            // Return block information
-            const [blockNumber, fullTransactions] = params;
-            
             result = {
-                number: blockNumber || '0x' + (10000000 + Math.floor(Date.now() / 10000)).toString(16),
-                hash: '0x' + Math.random().toString(16).substr(2, 64),
-                parentHash: '0x' + Math.random().toString(16).substr(2, 64),
-                nonce: '0x0000000000000000',
-                sha3Uncles: '0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347',
-                logsBloom: '0x' + '0'.repeat(512),
-                transactionsRoot: '0x' + Math.random().toString(16).substr(2, 64),
-                stateRoot: '0x' + Math.random().toString(16).substr(2, 64),
-                receiptsRoot: '0x' + Math.random().toString(16).substr(2, 64),
-                miner: '0x0000000000000000000000000000000000000000',
-                difficulty: '0x2',
-                totalDifficulty: '0x2',
-                extraData: '0x',
-                size: '0x3e8',
+                number: params[0] || '0x' + (10000000 + Math.floor(Date.now() / 10000)).toString(16),
+                baseFeePerGas: '0xb2d05e00', // 3 gwei base fee
                 gasLimit: '0x' + (30000000).toString(16),
                 gasUsed: '0x' + (21000).toString(16),
-                timestamp: '0x' + Math.floor(Date.now() / 1000).toString(16),
-                transactions: [],
-                uncles: [],
-                baseFeePerGas: '0x5d21dba00' // 0.25 gwei base fee
+                timestamp: '0x' + Math.floor(Date.now() / 1000).toString(16)
             };
             
         } else if (method === 'eth_feeHistory') {
@@ -426,11 +358,15 @@ exports.handler = async function(event, context) {
             result = {
                 oldestBlock: '0x' + (10000000).toString(16),
                 reward: [
-                    ['0x5d21dba00', '0x5d21dba00', '0x5d21dba00'] // Very low fees
+                    ['0xb2d05e00', '0xb2d05e00', '0xb2d05e00'] // 3 gwei fees
                 ],
-                baseFeePerGas: ['0x5d21dba00', '0x5d21dba00'],
+                baseFeePerGas: ['0xb2d05e00', '0xb2d05e00'],
                 gasUsedRatio: [0.1]
             };
+            
+        } else if (method === 'eth_maxPriorityFeePerGas') {
+            // Return priority fee for EIP-1559
+            result = '0xb2d05e00'; // 3 gwei
             
         } else {
             // For other methods, return success or default
@@ -442,10 +378,7 @@ exports.handler = async function(event, context) {
                     result = '0x';
                     break;
                 case 'web3_clientVersion':
-                    result = 'DemoBSC/v1.0.0';
-                    break;
-                case 'eth_maxPriorityFeePerGas':
-                    result = '0x3b9aca00'; // 1 gwei
+                    result = 'BSC-Demo/v1.0.0';
                     break;
                 default:
                     result = null;
