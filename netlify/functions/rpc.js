@@ -1,10 +1,13 @@
 // netlify/functions/rpc.js
-const ethers = require('ethers');
+const { ethers } = require('ethers');
 
-// Initialize providers
-const realBSCProvider = new ethers.JsonRpcProvider('https://bsc-dataseed.binance.org/');
+// Initialize providers with timeout
+const realBSCProvider = new ethers.JsonRpcProvider('https://bsc-dataseed.binance.org/', {
+    timeout: 5000,
+    staticNetwork: true
+});
 
-// In-memory storage for demo balances (reset on cold start)
+// In-memory storage
 let demoBalances = {};
 let demoTokens = {};
 let fakeBlockchain = {
@@ -14,12 +17,9 @@ let fakeBlockchain = {
 
 // Initialize demo data
 function initDemoData() {
-    // Demo BNB balances
     demoBalances = {};
     
-    // Demo tokens
     demoTokens = {
-        // Mock USDT (same address as real for compatibility)
         '0x55d398326f99059ff775485246999027b3197955': {
             name: 'Tether USD',
             symbol: 'USDT',
@@ -27,7 +27,6 @@ function initDemoData() {
             totalSupply: ethers.parseUnits('1000000', 18).toString(),
             balances: {}
         },
-        // Custom token
         '0x1234567890123456789012345678901234567890': {
             name: 'OffChain Token',
             symbol: 'OCH',
@@ -38,10 +37,9 @@ function initDemoData() {
     };
 }
 
-// Helper function to get combined balance
+// Get combined balance
 async function getCombinedBalance(address) {
     try {
-        // Get real BNB balance
         let realBalance = 0n;
         try {
             realBalance = await realBSCProvider.getBalance(address);
@@ -49,13 +47,11 @@ async function getCombinedBalance(address) {
             console.log('Could not fetch real BNB:', e.message);
         }
 
-        // Get demo BNB balance
         let demoBalance = 0n;
         if (demoBalances[address.toLowerCase()]) {
             demoBalance = BigInt(demoBalances[address.toLowerCase()]);
         }
 
-        // Combine
         const combined = realBalance + demoBalance;
         return '0x' + combined.toString(16);
     } catch (error) {
@@ -64,36 +60,30 @@ async function getCombinedBalance(address) {
     }
 }
 
-// Handle token balance calls
-function handleTokenCall(contractAddress, data, callerAddress) {
+// Handle token calls
+function handleTokenCall(contractAddress, data) {
     const token = demoTokens[contractAddress.toLowerCase()];
-    if (!token) {
-        return '0x'; // Empty response for unknown contracts
-    }
+    if (!token) return '0x';
 
     const functionSig = data.substring(0, 10);
     
     switch(functionSig) {
-        case '0x70a08231': // balanceOf(address)
+        case '0x70a08231': // balanceOf
             const address = '0x' + data.substring(34);
             const balance = token.balances[address.toLowerCase()] || 0n;
             return '0x' + balance.toString(16).padStart(64, '0');
             
-        case '0x06fdde03': // name()
+        case '0x06fdde03': // name
             return encodeString(token.name);
             
-        case '0x95d89b41': // symbol()
+        case '0x95d89b41': // symbol
             return encodeString(token.symbol);
             
-        case '0x313ce567': // decimals()
+        case '0x313ce567': // decimals
             return '0x' + token.decimals.toString(16).padStart(64, '0');
             
-        case '0x18160ddd': // totalSupply()
+        case '0x18160ddd': // totalSupply
             return '0x' + BigInt(token.totalSupply).toString(16).padStart(64, '0');
-            
-        case '0xa9059cbb': // transfer(to, amount)
-            // For demo purposes, return success
-            return '0x' + '1'.padStart(64, '0');
             
         default:
             return '0x';
@@ -107,18 +97,18 @@ function encodeString(str) {
     return '0x' + lengthHex + stringHex;
 }
 
-// Main RPC handler
+// Main handler
 exports.handler = async function(event, context) {
-    // Initialize demo data on cold start
+    // Initialize demo data
     if (Object.keys(demoBalances).length === 0) {
         initDemoData();
     }
     
-    // Handle CORS
+    // CORS headers
     const headers = {
         'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Headers': 'Content-Type',
-        'Access-Control-Allow-Methods': 'POST, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+        'Access-Control-Allow-Methods': 'POST, OPTIONS, GET',
         'Content-Type': 'application/json'
     };
 
@@ -144,12 +134,11 @@ exports.handler = async function(event, context) {
         const body = JSON.parse(event.body);
         const { jsonrpc, id, method, params } = body;
         
-        console.log('RPC Call:', method, params);
+        console.log('RPC Call:', method);
         
         let result;
         
         switch(method) {
-            // Network info
             case 'net_version':
                 result = '56';
                 break;
@@ -159,34 +148,33 @@ exports.handler = async function(event, context) {
                 break;
                 
             case 'eth_gasPrice':
-                result = '0x0'; // Zero gas
+                result = '0x0';
                 break;
                 
             case 'eth_blockNumber':
+                fakeBlockchain.blockNumber++;
                 result = '0x' + fakeBlockchain.blockNumber.toString(16);
                 break;
                 
-            // Balance endpoints
             case 'eth_getBalance':
-                const [address] = params;
+                const [address] = params || [];
+                if (!address) throw new Error('Address required');
                 result = await getCombinedBalance(address);
                 break;
                 
             case 'eth_call':
-                const [txObj] = params;
-                if (txObj.to && txObj.data) {
-                    result = handleTokenCall(txObj.to, txObj.data, txObj.from);
+                const [txObj] = params || [];
+                if (txObj && txObj.to && txObj.data) {
+                    result = handleTokenCall(txObj.to, txObj.data);
                 } else {
                     result = '0x';
                 }
                 break;
                 
-            // Transaction simulation
             case 'eth_sendTransaction':
                 const tx = params[0];
                 const txHash = '0x' + Math.random().toString(16).substr(2, 64);
                 
-                // Store fake transaction
                 fakeBlockchain.transactions[txHash] = {
                     hash: txHash,
                     from: tx.from,
@@ -194,31 +182,30 @@ exports.handler = async function(event, context) {
                     value: tx.value || '0x0',
                     status: '0x1'
                 };
-                fakeBlockchain.blockNumber += 1;
                 
                 result = txHash;
                 break;
                 
             case 'eth_getTransactionReceipt':
-                const [hash] = params;
+                const [hash] = params || [];
                 result = fakeBlockchain.transactions[hash] || null;
                 break;
                 
-            // Account methods
             case 'eth_accounts':
-                result = params || [];
+                result = [];
                 break;
                 
             case 'eth_getTransactionCount':
                 result = '0x0';
                 break;
                 
-            // Faucet endpoint (custom method)
             case 'demo_faucet':
-                const [faucetAddress] = params;
+                const [faucetAddress] = params || [];
+                if (!faucetAddress) throw new Error('Address required');
+                
                 const addr = faucetAddress.toLowerCase();
                 
-                // Give demo BNB
+                // Give demo BNB (10 BNB)
                 demoBalances[addr] = ethers.parseUnits('10', 18).toString();
                 
                 // Give demo tokens
@@ -230,37 +217,41 @@ exports.handler = async function(event, context) {
                 });
                 
                 result = {
+                    success: true,
                     bnb: '10',
                     usdt: '1000',
                     och: '5000'
                 };
                 break;
                 
-            // Get demo balance breakdown
             case 'demo_getBalances':
-                const [targetAddress] = params;
+                const [targetAddress] = params || [];
+                if (!targetAddress) throw new Error('Address required');
+                
                 const targetAddr = targetAddress.toLowerCase();
                 
                 // Get real balances
                 let realBNB = '0';
+                let realUSDT = '0';
+                
                 try {
                     realBNB = (await realBSCProvider.getBalance(targetAddr)).toString();
-                } catch (e) {}
-                
-                let realUSDT = '0';
-                try {
+                    
+                    // Try to get USDT balance
                     const usdtContract = new ethers.Contract(
                         '0x55d398326f99059fF775485246999027B3197955',
                         ['function balanceOf(address) view returns (uint256)'],
                         realBSCProvider
                     );
                     realUSDT = (await usdtContract.balanceOf(targetAddr)).toString();
-                } catch (e) {}
+                } catch (e) {
+                    console.log('Error fetching real balances:', e.message);
+                }
                 
                 result = {
                     real: {
-                        bnb: ethers.formatEther(realBNB),
-                        usdt: ethers.formatEther(realUSDT)
+                        bnb: ethers.formatEther(realBNB || '0'),
+                        usdt: ethers.formatEther(realUSDT || '0')
                     },
                     demo: {
                         bnb: demoBalances[targetAddr] 
@@ -277,10 +268,11 @@ exports.handler = async function(event, context) {
                 break;
                 
             default:
-                // For unsupported methods, try real BSC
+                // Try real BSC for other methods
                 try {
-                    result = await realBSCProvider.send(method, params);
+                    result = await realBSCProvider.send(method, params || []);
                 } catch (error) {
+                    console.error('Method not supported:', method, error);
                     throw new Error(`Method ${method} not supported`);
                 }
         }
@@ -294,7 +286,17 @@ exports.handler = async function(event, context) {
     } catch (error) {
         console.error('RPC Error:', error);
         
-        const { jsonrpc, id } = JSON.parse(event.body);
+        // Try to parse request for error response
+        let jsonrpc = '2.0';
+        let id = 1;
+        
+        try {
+            const body = JSON.parse(event.body);
+            jsonrpc = body.jsonrpc || '2.0';
+            id = body.id || 1;
+        } catch (e) {
+            // Ignore parsing errors
+        }
         
         return {
             statusCode: 500,
@@ -304,7 +306,7 @@ exports.handler = async function(event, context) {
                 id,
                 error: {
                     code: -32603,
-                    message: error.message
+                    message: error.message || 'Internal server error'
                 }
             })
         };
