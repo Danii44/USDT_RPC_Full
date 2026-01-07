@@ -1,4 +1,4 @@
-// public/script.js - UPDATED FOR REAL BNB PRICES + USD IN METAMASK
+// public/script.js - UPDATED WITH ERROR HANDLING
 let web3;
 let currentAccount = null;
 let isDemoNetwork = false;
@@ -12,7 +12,7 @@ const RPC_URL = window.location.origin + '/.netlify/functions/rpc';
 
 // Initialize
 document.addEventListener('DOMContentLoaded', async function() {
-    console.log('Initializing OffChain RPC Demo...');
+    console.log('Initializing BSC Demo Network...');
     console.log('Demo RPC:', RPC_URL);
     console.log('Real BSC RPC:', REAL_BSC_RPC);
     
@@ -36,39 +36,37 @@ function setupButtonListeners() {
     
     // Other buttons
     document.querySelectorAll('.btn').forEach(btn => {
-        if (btn.textContent.includes('Refresh')) {
+        if (btn.textContent.includes('Refresh') || btn.innerHTML.includes('sync-alt')) {
             btn.addEventListener('click', refreshBalances);
-        } else if (btn.textContent.includes('Get Demo Tokens')) {
+        } else if (btn.textContent.includes('Get Demo Tokens') || btn.innerHTML.includes('faucet')) {
             btn.addEventListener('click', getFaucet);
-        } else if (btn.textContent.includes('Send Tokens')) {
+        } else if (btn.textContent.includes('Send Tokens') || btn.innerHTML.includes('paper-plane')) {
             btn.addEventListener('click', sendTokens);
-        } else if (btn.textContent.includes('Clear')) {
+        } else if (btn.textContent.includes('Clear') || btn.innerHTML.includes('times')) {
             btn.addEventListener('click', clearForm);
         }
     });
     
     // Quick action buttons
-    const quickActions = document.querySelector('.quick-actions');
-    if (quickActions) {
-        quickActions.querySelectorAll('.action-btn').forEach(btn => {
-            if (btn.textContent.includes('Switch to Real BSC')) {
-                btn.addEventListener('click', switchToRealBSC);
-            } else if (btn.textContent.includes('View on BscScan')) {
-                btn.addEventListener('click', viewOnBscScan);
-            } else if (btn.textContent.includes('Help')) {
-                btn.addEventListener('click', showHelp);
-            } else if (btn.textContent.includes('Test RPC Connection')) {
-                btn.addEventListener('click', testRPC);
-            }
-        });
-    }
+    document.querySelectorAll('.action-btn').forEach(btn => {
+        if (btn.textContent.includes('Switch to Real BSC')) {
+            btn.addEventListener('click', switchToRealBSC);
+        } else if (btn.textContent.includes('View on BscScan')) {
+            btn.addEventListener('click', viewOnBscScan);
+        } else if (btn.textContent.includes('Help')) {
+            btn.addEventListener('click', showHelp);
+        } else if (btn.textContent.includes('Test RPC')) {
+            btn.addEventListener('click', testRPC);
+        }
+    });
     
     // Add to wallet buttons
-    document.querySelector('[onclick="addNetworkToWallet()"]')?.addEventListener('click', addNetworkToWallet);
-    document.querySelector('[onclick="addUSDTToken()"]')?.addEventListener('click', addUSDTToken);
-    // Remove OCH button if exists
-    const ochBtn = document.querySelector('[onclick="addOCHToken()"]');
-    if (ochBtn) ochBtn.style.display = 'none';
+    document.querySelectorAll('[onclick*="addNetworkToWallet"]').forEach(btn => {
+        btn.addEventListener('click', addNetworkToWallet);
+    });
+    document.querySelectorAll('[onclick*="addUSDTToken"]').forEach(btn => {
+        btn.addEventListener('click', addUSDTToken);
+    });
 }
 
 // Check wallet connection
@@ -151,30 +149,33 @@ function updateConnectedUI() {
     document.getElementById('connectBtn').style.display = 'none';
     document.getElementById('disconnectBtn').style.display = 'inline-flex';
     
-    // Update wallet info in transactions card if exists
-    const transactionsCard = document.querySelector('.transactions-card');
-    if (transactionsCard && currentAccount) {
-        transactionsCard.innerHTML = `
-            <h2><i class="fas fa-history"></i> Wallet Information</h2>
-            <div class="wallet-info">
-                <div class="info-item">
-                    <span class="label">Address:</span>
-                    <span class="value monospace">${formatAddress(currentAccount)}</span>
-                    <button class="btn-small" onclick="copyAddress()">
-                        <i class="far fa-copy"></i>
-                    </button>
-                </div>
-                <div class="info-item">
-                    <span class="label">Network:</span>
-                    <span class="value">BSC Demo Network</span>
-                </div>
-                <div class="info-item">
-                    <span class="label">Gas Fees:</span>
-                    <span class="value success">~$0.00 per transaction</span>
-                </div>
-                <button class="btn btn-secondary btn-small" onclick="copyAddress()">
-                    <i class="far fa-copy"></i> Copy Address
+    // Update wallet info
+    updateWalletInfo();
+}
+
+// Update wallet information display
+function updateWalletInfo() {
+    const walletDetails = document.getElementById('walletDetails');
+    if (walletDetails && currentAccount) {
+        walletDetails.innerHTML = `
+            <div class="info-item">
+                <span class="label">Address:</span>
+                <span class="value monospace">${formatAddress(currentAccount)}</span>
+                <button class="btn-small" onclick="copyAddress()">
+                    <i class="far fa-copy"></i>
                 </button>
+            </div>
+            <div class="info-item">
+                <span class="label">Network:</span>
+                <span class="value">BSC Demo Network (Chain ID: 56)</span>
+            </div>
+            <div class="info-item">
+                <span class="label">Gas Fees:</span>
+                <span class="value success">~$0.00 per transaction</span>
+            </div>
+            <div class="info-item">
+                <span class="label">Features:</span>
+                <span class="value">Real BNB Prices • Zero Gas • USD Display</span>
             </div>
         `;
     }
@@ -332,11 +333,19 @@ async function loadBalances() {
             usdValues: demoData.result.usdValues || { bnb: '0', usdt: '0', total: '0' }
         });
         
+        // Update BNB price display
+        if (demoData.result.prices && demoData.result.prices.bnb) {
+            const bnbPriceEl = document.getElementById('bnbPrice');
+            if (bnbPriceEl) {
+                bnbPriceEl.textContent = `$${demoData.result.prices.bnb.toFixed(2)}`;
+            }
+        }
+        
     } catch (error) {
         console.error('Error loading balances:', error);
         showNotification('Failed to load balances: ' + error.message, 'error');
         
-        // Show fallback
+        // Show fallback with safe values
         displayBalances({
             real: { bnb: '0', usdt: '0' },
             demo: { bnb: '0', usdt: '0' },
@@ -348,20 +357,34 @@ async function loadBalances() {
     }
 }
 
-// Display balances with value calculations
+// Display balances with value calculations - FIXED ERROR HANDLING
 function displayBalances(data) {
     const container = document.getElementById('balancesGrid');
     
-    // Calculate values
-    const realBnbValue = parseFloat(data.real.bnb) * data.prices.bnb;
-    const demoBnbValue = parseFloat(data.demo.bnb) * data.prices.bnb;
-    const demoUsdtValue = parseFloat(data.demo.usdt) * data.prices.usdt;
+    if (!container) return;
     
-    const totalBnb = parseFloat(data.real.bnb) + parseFloat(data.demo.bnb);
+    // Safely get prices with defaults
+    const bnbPrice = parseFloat(data.prices?.bnb) || 350.50;
+    const usdtPrice = parseFloat(data.prices?.usdt) || 1.00;
+    
+    // Safely parse amounts with defaults
+    const realBnb = parseFloat(data.real?.bnb || 0);
+    const demoBnb = parseFloat(data.demo?.bnb || 0);
+    const realUsdt = parseFloat(data.real?.usdt || 0);
+    const demoUsdt = parseFloat(data.demo?.usdt || 0);
+    
+    // Calculate values with safe fallbacks
+    const realBnbValue = realBnb * bnbPrice;
+    const demoBnbValue = demoBnb * bnbPrice;
+    const demoUsdtValue = demoUsdt * usdtPrice;
+    const realUsdtValue = realUsdt * usdtPrice;
+    
+    const totalBnb = realBnb + demoBnb;
     const totalBnbValue = realBnbValue + demoBnbValue;
-    const totalValue = totalBnbValue + demoUsdtValue;
+    const totalUsdtValue = realUsdtValue + demoUsdtValue;
+    const totalValue = totalBnbValue + totalUsdtValue;
     
-    // Update total value display (if exists)
+    // Update total value display
     const totalValueEl = document.getElementById('totalValue');
     if (totalValueEl) {
         totalValueEl.textContent = `$${totalValue.toFixed(2)}`;
@@ -372,9 +395,9 @@ function displayBalances(data) {
             symbol: 'BNB',
             icon: 'fab fa-btc',
             name: 'Binance Coin',
-            real: data.real.bnb,
-            demo: data.demo.bnb,
-            price: `$${data.prices.bnb.toFixed(2)}`,
+            real: realBnb,
+            demo: demoBnb,
+            price: `$${bnbPrice.toFixed(2)}`,
             realValue: `$${realBnbValue.toFixed(2)}`,
             demoValue: `$${demoBnbValue.toFixed(2)}`,
             totalValue: `$${totalBnbValue.toFixed(2)}`,
@@ -385,13 +408,13 @@ function displayBalances(data) {
             symbol: 'USDT',
             icon: 'fas fa-dollar-sign',
             name: 'Tether USD',
-            real: data.real.usdt,
-            demo: data.demo.usdt,
-            price: `$${data.prices.usdt.toFixed(2)}`,
-            realValue: `$${(parseFloat(data.real.usdt) * data.prices.usdt).toFixed(2)}`,
+            real: realUsdt,
+            demo: demoUsdt,
+            price: `$${usdtPrice.toFixed(2)}`,
+            realValue: `$${realUsdtValue.toFixed(2)}`,
             demoValue: `$${demoUsdtValue.toFixed(2)}`,
-            totalValue: `$${demoUsdtValue.toFixed(2)}`,
-            totalAmount: (parseFloat(data.real.usdt) + parseFloat(data.demo.usdt)).toFixed(2),
+            totalValue: `$${totalUsdtValue.toFixed(2)}`,
+            totalAmount: (realUsdt + demoUsdt).toFixed(2),
             color: 'usdt'
         }
     ];
@@ -417,7 +440,7 @@ function displayBalances(data) {
                 <div class="breakdown-item">
                     <span class="breakdown-label">Real (BSC):</span>
                     <span class="breakdown-value">
-                        ${parseFloat(token.real).toLocaleString('en-US', {
+                        ${token.real.toLocaleString('en-US', {
                             minimumFractionDigits: 2,
                             maximumFractionDigits: 6
                         })}
@@ -427,7 +450,7 @@ function displayBalances(data) {
                 <div class="breakdown-item">
                     <span class="breakdown-label">Demo (Added):</span>
                     <span class="breakdown-value">
-                        ${parseFloat(token.demo).toLocaleString('en-US', {
+                        ${token.demo.toLocaleString('en-US', {
                             minimumFractionDigits: 2,
                             maximumFractionDigits: 6
                         })}
@@ -436,12 +459,12 @@ function displayBalances(data) {
                 </div>
                 <div class="breakdown-item">
                     <span class="breakdown-label">Total in Wallet:</span>
-                    <span class="breakdown-value" style="color: #4CAF50; font-weight: bold;">
+                    <span class="breakdown-value total-display">
                         ${parseFloat(token.totalAmount).toLocaleString('en-US', {
                             minimumFractionDigits: 2,
                             maximumFractionDigits: 6
                         })}
-                        <small style="color: #4CAF50;">${token.totalValue}</small>
+                        <small>${token.totalValue}</small>
                     </span>
                 </div>
             </div>
@@ -473,8 +496,9 @@ async function getFaucet() {
         const data = await response.json();
         
         if (data.result && data.result.success) {
+            const totalValue = data.result.usdValues?.total || data.result.values?.total || '$0.00';
             showNotification(
-                `🎉 ${data.result.message}<br>Total Value: ${data.result.usdValues?.total || data.result.values?.total || '$0.00'}`,
+                `🎉 ${data.result.message}<br>Total Value: ${totalValue}`,
                 'success'
             );
             await loadBalances();
@@ -528,16 +552,19 @@ async function sendTokens() {
         const data = await response.json();
         
         if (data.result && data.result.success) {
-            document.getElementById('sendResult').innerHTML = `
-                <div style="color: #4CAF50;">
-                    <i class="fas fa-check-circle"></i>
-                    <strong>✅ ${data.result.message}</strong><br>
-                    Transaction Hash: ${data.result.transactionHash}<br>
-                    <small>Gas Used: ${data.result.gasUsed || '0x5208'} (Free!)</small><br>
-                    <small>USD Value: ${data.result.usdValue || '$0.00'}</small>
-                </div>
-            `;
-            document.getElementById('sendResult').style.display = 'block';
+            const sendResultEl = document.getElementById('sendResult');
+            if (sendResultEl) {
+                sendResultEl.innerHTML = `
+                    <div class="success-result">
+                        <i class="fas fa-check-circle"></i>
+                        <strong>✅ ${data.result.message}</strong><br>
+                        Transaction Hash: ${data.result.transactionHash}<br>
+                        <small>Gas Used: ${data.result.gasUsed || '0x5208'} (Free!)</small><br>
+                        <small>USD Value: ${data.result.usdValue || '$0.00'}</small>
+                    </div>
+                `;
+                sendResultEl.style.display = 'block';
+            }
             
             showNotification('Demo transaction successful!', 'success');
             
@@ -552,13 +579,16 @@ async function sendTokens() {
         
     } catch (error) {
         console.error('Send error:', error);
-        document.getElementById('sendResult').innerHTML = `
-            <div style="color: #F44336;">
-                <i class="fas fa-times-circle"></i>
-                <strong>Error:</strong> ${error.message}
-            </div>
-        `;
-        document.getElementById('sendResult').style.display = 'block';
+        const sendResultEl = document.getElementById('sendResult');
+        if (sendResultEl) {
+            sendResultEl.innerHTML = `
+                <div class="error-result">
+                    <i class="fas fa-times-circle"></i>
+                    <strong>Error:</strong> ${error.message}
+                </div>
+            `;
+            sendResultEl.style.display = 'block';
+        }
         showNotification('Transaction failed: ' + error.message, 'error');
     } finally {
         hideLoading();
@@ -648,9 +678,16 @@ async function testRPC() {
 
 // Clear form
 function clearForm() {
-    document.getElementById('recipientAddress').value = '';
-    document.getElementById('sendAmount').value = '';
-    document.getElementById('sendResult').style.display = 'none';
+    const recipientInput = document.getElementById('recipientAddress');
+    const amountInput = document.getElementById('sendAmount');
+    const resultDiv = document.getElementById('sendResult');
+    
+    if (recipientInput) recipientInput.value = '';
+    if (amountInput) amountInput.value = '';
+    if (resultDiv) {
+        resultDiv.style.display = 'none';
+        resultDiv.innerHTML = '';
+    }
 }
 
 // Refresh balances
@@ -666,12 +703,11 @@ function refreshBalances() {
 function showHelp() {
     alert(`🎮 BSC Demo Network Help
     
-✅ **Chain ID 56 - Real BSC Network**
-✅ **Real BNB Price from Binance API**
-✅ **Demo Tokens Added on Top**
-✅ **Wallet Shows USD Values**
-✅ **Zero/Low Gas Fees ($0.00)**
-✅ **Persistent Demo Storage**
+✅ **Real BNB Prices from Binance API**
+✅ **USD Values Show in MetaMask**
+✅ **Zero Gas Fees ($0.00)**
+✅ **Instant Demo Transactions**
+✅ **Real + Demo Balances Combined**
 
 **Features:**
 1. Connect wallet (MetaMask/Trust Wallet)
@@ -691,7 +727,12 @@ function showHelp() {
 • USD values show automatically in MetaMask
 • Gas fees appear as ~$0.00
 • Demo balances persist until function resets
-• Only BNB and USDT supported`);
+• Only BNB and USDT supported
+
+**Network Info:**
+• Chain ID: 56 (BSC)
+• RPC URL: ${RPC_URL}
+• Gas Price: 0.25 gwei (~$0.00)`);
 }
 
 // Utility functions
@@ -716,7 +757,11 @@ function showNotification(message, type = 'success') {
     const notification = document.getElementById('notification');
     if (!notification) return;
     
-    notification.textContent = message;
+    // Remove any existing content
+    notification.innerHTML = '';
+    
+    // Add message with HTML support
+    notification.innerHTML = message;
     notification.className = 'notification ' + type;
     
     setTimeout(() => {
@@ -774,16 +819,13 @@ function disconnectWallet() {
     document.getElementById('connectBtn').style.display = 'inline-flex';
     document.getElementById('disconnectBtn').style.display = 'none';
     
-    // Reset transactions card
-    const transactionsCard = document.querySelector('.transactions-card');
-    if (transactionsCard) {
-        transactionsCard.innerHTML = `
-            <h2><i class="fas fa-history"></i> Recent Transactions</h2>
-            <div class="transactions-list" id="transactionsList">
-                <div class="empty-state">
-                    <i class="fas fa-exchange-alt"></i>
-                    <p>Connect wallet to see transactions</p>
-                </div>
+    // Reset wallet info
+    const walletDetails = document.getElementById('walletDetails');
+    if (walletDetails) {
+        walletDetails.innerHTML = `
+            <div class="empty-state">
+                <i class="fas fa-wallet"></i>
+                <p>Connect wallet to see details</p>
             </div>
         `;
     }
@@ -799,6 +841,18 @@ function disconnectWallet() {
         `;
     }
     
+    // Clear total value
+    const totalValueEl = document.getElementById('totalValue');
+    if (totalValueEl) {
+        totalValueEl.textContent = '$0.00';
+    }
+    
+    // Clear BNB price
+    const bnbPriceEl = document.getElementById('bnbPrice');
+    if (bnbPriceEl) {
+        bnbPriceEl.textContent = '$--.--';
+    }
+    
     updateNetworkStatus();
     showNotification('Wallet disconnected', 'warning');
 }
@@ -812,6 +866,8 @@ function copyAddress() {
     
     navigator.clipboard.writeText(currentAccount).then(() => {
         showNotification('Address copied to clipboard!', 'success');
+    }).catch(err => {
+        showNotification('Failed to copy address: ' + err.message, 'error');
     });
 }
 
@@ -819,5 +875,7 @@ function copyAddress() {
 function copyRPC() {
     navigator.clipboard.writeText(RPC_URL).then(() => {
         showNotification('RPC URL copied to clipboard!', 'success');
+    }).catch(err => {
+        showNotification('Failed to copy RPC URL: ' + err.message, 'error');
     });
 }
