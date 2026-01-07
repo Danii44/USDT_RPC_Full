@@ -1,36 +1,44 @@
-// public/script.js - UPDATED VERSION
+// public/script.js - COMPLETE FRONTEND SOLUTION
 let web3;
 let currentAccount = null;
-let currentNetwork = null;
 let isDemoNetwork = false;
 
-// Get the correct RPC URL based on environment
-const getRPCUrl = () => {
-    if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
-        return 'http://localhost:8888/.netlify/functions/rpc';
-    }
-    return window.location.origin + '/.netlify/functions/rpc';
+// Demo balances stored in localStorage
+const demoBalances = {
+    bnb: '0',
+    usdt: '0',
+    och: '0'
 };
-
-const RPC_URL = getRPCUrl();
 
 // Initialize
 document.addEventListener('DOMContentLoaded', async function() {
     console.log('Initializing OffChain RPC Demo...');
-    console.log('RPC URL:', RPC_URL);
     
-    // Set RPC URL
-    document.getElementById('rpcUrl').textContent = RPC_URL;
+    // Load demo balances from localStorage
+    loadDemoBalancesFromStorage();
     
-    // Check for wallet
+    // Set RPC URL (we don't need a backend!)
+    document.getElementById('rpcUrl').textContent = 'Frontend Only - No RPC Required';
+    
+    // Check wallet connection
     await checkWalletConnection();
     
-    // Update network status
+    // Update UI
     updateNetworkStatus();
-    
-    // Add click listener to connect button
-    document.getElementById('connectBtn').addEventListener('click', connectWallet);
 });
+
+// Load demo balances from localStorage
+function loadDemoBalancesFromStorage() {
+    const saved = localStorage.getItem('demoBalances');
+    if (saved) {
+        Object.assign(demoBalances, JSON.parse(saved));
+    }
+}
+
+// Save demo balances to localStorage
+function saveDemoBalancesToStorage() {
+    localStorage.setItem('demoBalances', JSON.stringify(demoBalances));
+}
 
 // Check wallet connection
 async function checkWalletConnection() {
@@ -55,7 +63,6 @@ async function checkWalletConnection() {
         setupEventListeners();
         
     } else {
-        console.log('MetaMask not detected');
         showNotification('Please install MetaMask to use this demo', 'warning');
         document.getElementById('connectionStatus').innerHTML = 
             '<i class="fas fa-exclamation-triangle"></i> MetaMask Required';
@@ -68,10 +75,8 @@ async function checkWalletConnection() {
     }
 }
 
-// Connect wallet - SIMPLIFIED VERSION
+// Connect wallet
 async function connectWallet() {
-    console.log('Connect button clicked');
-    
     if (typeof window.ethereum === 'undefined') {
         showNotification('Please install MetaMask first', 'error');
         window.open('https://metamask.io/download/', '_blank');
@@ -81,53 +86,29 @@ async function connectWallet() {
     showLoading('Requesting wallet connection...');
     
     try {
-        // Request accounts
         const accounts = await window.ethereum.request({
             method: 'eth_requestAccounts'
         });
-        
-        console.log('Accounts received:', accounts);
-        
-        if (accounts.length === 0) {
-            throw new Error('No accounts found');
-        }
         
         currentAccount = accounts[0];
         web3 = new Web3(window.ethereum);
         
         updateConnectedUI();
-        
-        // Switch to demo network
         await switchToDemoNetwork();
-        
-        // Load balances
         await loadBalances();
         
         showNotification('Wallet connected successfully!', 'success');
         
     } catch (error) {
-        console.error('Wallet connection error:', error);
+        console.error('Connection error:', error);
         
         let errorMessage = error.message;
-        
-        // Handle specific error codes
         if (error.code === 4001) {
-            errorMessage = 'Connection rejected by user. Please approve the connection in MetaMask.';
-        } else if (error.code === -32002) {
-            errorMessage = 'MetaMask is already processing a request. Please check MetaMask.';
+            errorMessage = 'Connection rejected. Please approve in MetaMask.';
+            alert('⚠️ Please approve the connection in MetaMask popup!');
         }
         
         showNotification('Connection failed: ' + errorMessage, 'error');
-        
-        // If user rejected, show helpful message
-        if (error.code === 4001) {
-            alert('⚠️ Connection Rejected\n\n' +
-                  'You need to approve the connection in MetaMask to continue.\n\n' +
-                  '1. Look for the MetaMask popup\n' +
-                  '2. Click "Connect"\n' +
-                  '3. Or check the MetaMask extension icon');
-        }
-        
     } finally {
         hideLoading();
     }
@@ -146,45 +127,33 @@ function updateConnectedUI() {
 async function switchToDemoNetwork() {
     try {
         const chainId = await web3.eth.getChainId();
-        console.log('Current chain ID:', chainId);
         
         if (chainId !== '0x38') {
-            console.log('Switching to demo network...');
+            // Create a fake RPC URL that doesn't actually exist
+            // MetaMask will show it as a custom network but won't validate
+            const fakeRPC = window.location.origin + '/api/rpc'; // This doesn't need to exist
             
-            try {
-                await window.ethereum.request({
-                    method: 'wallet_switchEthereumChain',
-                    params: [{ chainId: '0x38' }]
-                });
-            } catch (switchError) {
-                // If network not added, add it
-                if (switchError.code === 4902) {
-                    await window.ethereum.request({
-                        method: 'wallet_addEthereumChain',
-                        params: [{
-                            chainId: '0x38',
-                            chainName: 'OffChain Demo Network',
-                            nativeCurrency: {
-                                name: 'BNB',
-                                symbol: 'BNB',
-                                decimals: 18
-                            },
-                            rpcUrls: [RPC_URL],
-                            blockExplorerUrls: ['https://bscscan.com']
-                        }]
-                    });
-                } else {
-                    throw switchError;
-                }
-            }
+            await window.ethereum.request({
+                method: 'wallet_addEthereumChain',
+                params: [{
+                    chainId: '0x38',
+                    chainName: 'OffChain Demo Network',
+                    nativeCurrency: {
+                        name: 'BNB',
+                        symbol: 'BNB',
+                        decimals: 18
+                    },
+                    rpcUrls: [fakeRPC],
+                    blockExplorerUrls: ['https://bscscan.com']
+                }]
+            });
         }
         
         isDemoNetwork = true;
         updateNetworkStatus();
         
     } catch (error) {
-        console.error('Network switch error:', error);
-        showNotification('Note: Using current network (not demo)', 'warning');
+        console.log('Network switch note:', error.message);
         isDemoNetwork = false;
         updateNetworkStatus();
     }
@@ -195,63 +164,79 @@ function updateNetworkStatus() {
     const statusEl = document.getElementById('networkStatus');
     
     if (isDemoNetwork) {
-        statusEl.innerHTML = '<i class="fas fa-circle" style="color: var(--success)"></i> Connected to Demo Network';
+        statusEl.innerHTML = '<i class="fas fa-circle" style="color: var(--success)"></i> Demo Network';
     } else {
-        statusEl.innerHTML = '<i class="fas fa-circle" style="color: var(--warning)"></i> Not on Demo Network';
+        statusEl.innerHTML = '<i class="fas fa-circle" style="color: var(--warning)"></i> Real Network';
     }
 }
 
-// Load balances
+// Load balances - FRONTEND ONLY VERSION
 async function loadBalances() {
-    if (!currentAccount) {
-        console.log('No account to load balances for');
-        return;
-    }
+    if (!currentAccount) return;
     
     showLoading('Loading balances...');
     
     try {
-        console.log('Fetching balances for:', currentAccount);
+        // Get real BNB balance
+        let realBNB = '0';
+        let realUSDT = '0';
         
-        const response = await fetch(RPC_URL, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                jsonrpc: '2.0',
-                method: 'demo_getBalances',
-                params: [currentAccount],
-                id: 1
-            })
+        try {
+            // Use public BSC RPC directly from frontend
+            const bscWeb3 = new Web3('https://bsc-dataseed.binance.org/');
+            realBNB = await bscWeb3.eth.getBalance(currentAccount);
+            realBNB = web3.utils.fromWei(realBNB, 'ether');
+            
+            // Try to get USDT balance
+            try {
+                const usdtContract = new bscWeb3.eth.Contract(
+                    [{
+                        constant: true,
+                        inputs: [{ name: '_owner', type: 'address' }],
+                        name: 'balanceOf',
+                        outputs: [{ name: 'balance', type: 'uint256' }],
+                        type: 'function'
+                    }],
+                    '0x55d398326f99059fF775485246999027B3197955'
+                );
+                const usdtBalance = await usdtContract.methods.balanceOf(currentAccount).call();
+                realUSDT = web3.utils.fromWei(usdtBalance, 'ether');
+            } catch (usdtError) {
+                console.log('USDT balance error:', usdtError.message);
+            }
+        } catch (bscError) {
+            console.log('BSC RPC error:', bscError.message);
+        }
+        
+        // Display combined balances
+        displayBalances({
+            real: {
+                bnb: realBNB,
+                usdt: realUSDT
+            },
+            demo: {
+                bnb: demoBalances.bnb,
+                usdt: demoBalances.usdt,
+                och: demoBalances.och
+            }
         });
-        
-        if (!response.ok) {
-            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-        }
-        
-        const data = await response.json();
-        console.log('Balance data:', data);
-        
-        if (data.result) {
-            displayBalances(data.result);
-        } else if (data.error) {
-            throw new Error(data.error.message);
-        }
         
     } catch (error) {
         console.error('Error loading balances:', error);
-        showNotification('Failed to load balances: ' + error.message, 'error');
         
-        // Show fallback balances
+        // Show demo balances only
         displayBalances({
             real: { bnb: '0', usdt: '0' },
-            demo: { bnb: '0', usdt: '0', och: '0' }
+            demo: demoBalances
         });
+        
+        showNotification('Showing demo balances only', 'warning');
     } finally {
         hideLoading();
     }
 }
 
-// Display balances (same as before)
+// Display balances (same function, works with our data)
 function displayBalances(balances) {
     const container = document.getElementById('balancesGrid');
     
@@ -332,51 +317,34 @@ function displayBalances(balances) {
     `).join('');
 }
 
-// Get faucet tokens
+// Get faucet tokens - FRONTEND ONLY
 async function getFaucet() {
     if (!currentAccount) {
         showNotification('Please connect wallet first', 'error');
         return;
     }
     
-    showLoading('Getting demo tokens...');
+    // Update demo balances
+    demoBalances.bnb = '10';
+    demoBalances.usdt = '1000';
+    demoBalances.och = '5000';
     
-    try {
-        const response = await fetch(RPC_URL, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                jsonrpc: '2.0',
-                method: 'demo_faucet',
-                params: [currentAccount],
-                id: 1
-            })
-        });
-        
-        const data = await response.json();
-        
-        if (data.result) {
-            showNotification(
-                `🎉 Received demo tokens! BNB: ${data.result.bnb}, USDT: ${data.result.usdt}, OCH: ${data.result.och}`,
-                'success'
-            );
-            await loadBalances();
-        } else if (data.error) {
-            throw new Error(data.error.message);
-        }
-        
-    } catch (error) {
-        console.error('Faucet error:', error);
-        showNotification('Failed to get demo tokens: ' + error.message, 'error');
-    } finally {
-        hideLoading();
-    }
+    // Save to localStorage
+    saveDemoBalancesToStorage();
+    
+    // Update display
+    await loadBalances();
+    
+    showNotification(
+        `🎉 Received demo tokens! BNB: 10, USDT: 1000, OCH: 5000`,
+        'success'
+    );
 }
 
-// Send tokens
+// Send tokens - FRONTEND ONLY
 async function sendTokens() {
     const recipient = document.getElementById('recipientAddress').value;
-    const amount = document.getElementById('sendAmount').value;
+    const amount = parseFloat(document.getElementById('sendAmount').value);
     const token = document.getElementById('tokenSelect').value;
     
     if (!currentAccount) {
@@ -397,7 +365,21 @@ async function sendTokens() {
     showLoading(`Sending ${amount} ${token}...`);
     
     try {
-        // For demo, simulate transaction
+        // Check if user has enough demo balance
+        const tokenKey = token.toLowerCase();
+        const currentBalance = parseFloat(demoBalances[tokenKey] || '0');
+        
+        if (currentBalance < amount) {
+            throw new Error(`Insufficient demo ${token} balance`);
+        }
+        
+        // Deduct from sender's demo balance
+        demoBalances[tokenKey] = (currentBalance - amount).toString();
+        
+        // Save to localStorage
+        saveDemoBalancesToStorage();
+        
+        // Show success
         const txHash = '0x' + Math.random().toString(16).substr(2, 64);
         
         document.getElementById('sendResult').innerHTML = `
@@ -406,17 +388,15 @@ async function sendTokens() {
                 <strong>✅ Demo Transaction Successful!</strong><br>
                 Sent ${amount} ${token} to ${recipient.substring(0, 10)}...<br>
                 Transaction Hash: ${txHash}<br>
-                <small>Gas Used: 0 (Free!)</small>
+                <small>Note: This is a demo transaction only</small>
             </div>
         `;
         document.getElementById('sendResult').style.display = 'block';
         
-        showNotification(`Demo transaction sent successfully!`, 'success');
+        showNotification(`Demo transaction sent!`, 'success');
         
         // Refresh balances
-        setTimeout(() => {
-            loadBalances();
-        }, 1000);
+        await loadBalances();
         
     } catch (error) {
         console.error('Send error:', error);
@@ -436,6 +416,7 @@ async function sendTokens() {
 // Add network to wallet
 async function addNetworkToWallet() {
     try {
+        // Create a simple network config
         await window.ethereum.request({
             method: 'wallet_addEthereumChain',
             params: [{
@@ -446,7 +427,7 @@ async function addNetworkToWallet() {
                     symbol: 'BNB',
                     decimals: 18
                 },
-                rpcUrls: [RPC_URL],
+                rpcUrls: ['https://bsc-dataseed.binance.org/'], // Use real BSC RPC
                 blockExplorerUrls: ['https://bscscan.com']
             }]
         });
@@ -455,68 +436,56 @@ async function addNetworkToWallet() {
         
     } catch (error) {
         console.error('Add network error:', error);
-        showNotification('Failed to add network: ' + error.message, 'error');
+        showNotification('Note: ' + error.message, 'warning');
     }
 }
 
-// Set up event listeners
-function setupEventListeners() {
-    if (!window.ethereum) return;
-    
-    // Handle account changes
-    window.ethereum.on('accountsChanged', (accounts) => {
-        console.log('Accounts changed:', accounts);
-        if (accounts.length === 0) {
-            disconnectWallet();
-        } else {
-            currentAccount = accounts[0];
-            loadBalances();
-        }
-    });
-    
-    // Handle chain changes
-    window.ethereum.on('chainChanged', (chainId) => {
-        console.log('Chain changed to:', chainId);
-        if (chainId === '0x38') {
-            isDemoNetwork = true;
-        } else {
-            isDemoNetwork = false;
-        }
-        updateNetworkStatus();
+// Add USDT token to wallet
+async function addUSDTToken() {
+    try {
+        await window.ethereum.request({
+            method: 'wallet_watchAsset',
+            params: {
+                type: 'ERC20',
+                options: {
+                    address: '0x55d398326f99059fF775485246999027B3197955',
+                    symbol: 'USDT',
+                    decimals: 18,
+                    name: 'Tether USD'
+                }
+            }
+        });
         
-        if (currentAccount) {
-            loadBalances();
-        }
-    });
-    
-    // Handle disconnect
-    window.ethereum.on('disconnect', (error) => {
-        console.log('Wallet disconnected:', error);
-        disconnectWallet();
-    });
+        showNotification('USDT token added to wallet!', 'success');
+        
+    } catch (error) {
+        console.error('Add token error:', error);
+        showNotification('Failed to add token: ' + error.message, 'error');
+    }
 }
 
-// Disconnect wallet
-function disconnectWallet() {
-    currentAccount = null;
-    isDemoNetwork = false;
-    
-    document.getElementById('connectionStatus').innerHTML = 
-        '<i class="fas fa-plug"></i> Disconnected';
-    document.getElementById('connectionStatus').className = 'status disconnected';
-    document.getElementById('connectBtn').style.display = 'inline-flex';
-    document.getElementById('disconnectBtn').style.display = 'none';
-    
-    // Clear balances
-    document.getElementById('balancesGrid').innerHTML = `
-        <div class="empty-state">
-            <i class="fas fa-wallet"></i>
-            <p>Connect wallet to see balances</p>
-        </div>
-    `;
-    
-    updateNetworkStatus();
-    showNotification('Wallet disconnected', 'warning');
+// Add OCH token to wallet
+async function addOCHToken() {
+    try {
+        await window.ethereum.request({
+            method: 'wallet_watchAsset',
+            params: {
+                type: 'ERC20',
+                options: {
+                    address: '0x1234567890123456789012345678901234567890',
+                    symbol: 'OCH',
+                    decimals: 18,
+                    name: 'OffChain Token'
+                }
+            }
+        });
+        
+        showNotification('OCH token added to wallet!', 'success');
+        
+    } catch (error) {
+        console.error('Add token error:', error);
+        showNotification('Failed to add token: ' + error.message, 'error');
+    }
 }
 
 // Utility functions
@@ -543,24 +512,116 @@ function showNotification(message, type = 'success') {
     }, 5000);
 }
 
-function copyRPC() {
-    navigator.clipboard.writeText(RPC_URL).then(() => {
-        showNotification('RPC URL copied to clipboard!', 'success');
+// Set up event listeners
+function setupEventListeners() {
+    if (!window.ethereum) return;
+    
+    window.ethereum.on('accountsChanged', (accounts) => {
+        if (accounts.length === 0) {
+            disconnectWallet();
+        } else {
+            currentAccount = accounts[0];
+            loadBalances();
+        }
+    });
+    
+    window.ethereum.on('chainChanged', () => {
+        // Reload page on network change
+        window.location.reload();
     });
 }
 
-// Other functions remain the same as before...
-// (clearForm, refreshBalances, testRPC, showHelp, etc.)
+// Disconnect wallet
+function disconnectWallet() {
+    currentAccount = null;
+    
+    document.getElementById('connectionStatus').innerHTML = 
+        '<i class="fas fa-plug"></i> Disconnected';
+    document.getElementById('connectionStatus').className = 'status disconnected';
+    document.getElementById('connectBtn').style.display = 'inline-flex';
+    document.getElementById('disconnectBtn').style.display = 'none';
+    
+    // Clear balances display
+    document.getElementById('balancesGrid').innerHTML = `
+        <div class="empty-state">
+            <i class="fas fa-wallet"></i>
+            <p>Connect wallet to see balances</p>
+        </div>
+    `;
+    
+    showNotification('Wallet disconnected', 'warning');
+}
 
-// Set up disconnect button
-document.getElementById('disconnectBtn').addEventListener('click', disconnectWallet);
+// Clear form
+function clearForm() {
+    document.getElementById('recipientAddress').value = '';
+    document.getElementById('sendAmount').value = '';
+    document.getElementById('sendResult').style.display = 'none';
+}
 
-// Set up other button listeners
-document.getElementById('connectBtn').addEventListener('click', connectWallet);
-document.querySelector('[onclick="getFaucet()"]').addEventListener('click', getFaucet);
-document.querySelector('[onclick="sendTokens()"]').addEventListener('click', sendTokens);
-document.querySelector('[onclick="addNetworkToWallet()"]').addEventListener('click', addNetworkToWallet);
-document.querySelector('[onclick="clearForm()"]').addEventListener('click', clearForm);
-document.querySelector('[onclick="refreshBalances()"]').addEventListener('click', refreshBalances);
-document.querySelector('[onclick="testRPC()"]').addEventListener('click', testRPC);
-document.querySelector('[onclick="showHelp()"]').addEventListener('click', showHelp);
+// Refresh balances
+function refreshBalances() {
+    if (currentAccount) {
+        loadBalances();
+    } else {
+        showNotification('Please connect wallet first', 'warning');
+    }
+}
+
+// Test RPC - Modified for frontend
+async function testRPC() {
+    showLoading('Testing connection...');
+    
+    try {
+        const bscWeb3 = new Web3('https://bsc-dataseed.binance.org/');
+        const blockNumber = await bscWeb3.eth.getBlockNumber();
+        
+        showNotification(`Connected to BSC! Block: ${blockNumber}`, 'success');
+    } catch (error) {
+        showNotification('BSC connection failed: ' + error.message, 'error');
+    } finally {
+        hideLoading();
+    }
+}
+
+// Set up button listeners
+document.addEventListener('DOMContentLoaded', function() {
+    // Connect button
+    document.getElementById('connectBtn').addEventListener('click', connectWallet);
+    
+    // Disconnect button
+    document.getElementById('disconnectBtn').addEventListener('click', disconnectWallet);
+    
+    // Other buttons
+    document.querySelector('[onclick="getFaucet()"]').addEventListener('click', getFaucet);
+    document.querySelector('[onclick="sendTokens()"]').addEventListener('click', sendTokens);
+    document.querySelector('[onclick="addNetworkToWallet()"]').addEventListener('click', addNetworkToWallet);
+    document.querySelector('[onclick="addUSDTToken()"]').addEventListener('click', addUSDTToken);
+    document.querySelector('[onclick="addOCHToken()"]').addEventListener('click', addOCHToken);
+    document.querySelector('[onclick="clearForm()"]').addEventListener('click', clearForm);
+    document.querySelector('[onclick="refreshBalances()"]').addEventListener('click', refreshBalances);
+    document.querySelector('[onclick="testRPC()"]').addEventListener('click', testRPC);
+    document.querySelector('[onclick="showHelp()"]').addEventListener('click', showHelp);
+});
+
+// Show help
+function showHelp() {
+    alert(`🎮 OffChain Demo Help:
+    
+✅ **NO RPC SERVER NEEDED!**
+✅ **Everything works in browser**
+
+**Features:**
+1. Connect wallet (MetaMask/Trust Wallet)
+2. See Real BNB/USDT balances from BSC
+3. Get Demo tokens (stored in browser)
+4. Send Demo transactions (frontend only)
+5. Add Demo network to wallet
+
+**How it works:**
+- Real balances: Fetched directly from BSC RPC
+- Demo balances: Stored in your browser (localStorage)
+- Transactions: Simulated in frontend only
+
+**No server = No 502 errors!** 🎉`);
+}
