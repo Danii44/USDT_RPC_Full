@@ -1,18 +1,13 @@
 {
   "name": "offchain-rpc-demo",
   "version": "1.0.0",
-  "description": "OffChain RPC Demo with Real + Demo Balances",
+  "description": "OffChain RPC Demo - Netlify Functions",
   "main": "index.js",
   "scripts": {
-    "build": "echo 'Building for Netlify...'",
-    "dev": "netlify dev"
+    "build": "echo 'Build complete'"
   },
-  "dependencies": {
-    "ethers": "^6.7.0"
-  },
-  "devDependencies": {
-    "@netlify/functions": "^2.0.0"
-  },
+  "dependencies": {},
+  "devDependencies": {},
   "engines": {
     "node": ">=18.0.0"
   }
